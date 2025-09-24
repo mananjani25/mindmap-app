@@ -1,0 +1,82 @@
+version: '3.8'
+
+services:
+  # 1. PostgreSQL Database Service
+  postgres:
+    image: postgres:15-alpine
+    restart: always
+    environment:
+      POSTGRES_DB: mindmap_app
+      POSTGRES_USER: pensiveverse
+      POSTGRES_PASSWORD: password
+    ports:
+      - '5433:5432' # Expose on host port 5433
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pensiveverse -d mindmap_app"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # 2. Hasura GraphQL Engine Service
+  hasura:
+    image: hasura/graphql-engine:v2.36.1
+    ports:
+      - '8080:8080'
+    depends_on:
+      postgres:
+        condition: service_healthy # Wait for postgres to be ready
+    restart: always
+    environment:
+      HASURA_GRAPHQL_DATABASE_URL: postgresql://pensiveverse:password@postgres:5432/mindmap_app
+      HASURA_GRAPHQL_ENABLE_CONSOLE: 'true'
+      HASURA_GRAPHQL_DEV_MODE: 'true'
+      HASURA_GRAPHQL_ENABLED_LOG_TYPES: startup, http-log, webhook-log, websocket-log, query-log
+      HASURA_GRAPHQL_ADMIN_SECRET: 83ab881d73f4a5ff47b6a856a03aea22967efef99e75590cf9cc13f973a54837
+      HASURA_GRAPHQL_METADATA_DATABASE_URL: postgresql://pensiveverse:password@postgres:5432/mindmap_app
+      HASURA_GRAPHQL_JWT_SECRET: '{"type":"HS256","key":"ae5a6beae3cf5d737d8110b7eb15700aa6278b4ce65e854c012b2743d93fc973"}'
+      HASURA_GRAPHQL_CORS_DOMAIN: 'http://localhost:3000'
+    volumes:
+      - ./hasura/metadata:/hasura-metadata
+      - ./hasura/migrations:/hasura-migrations
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/healthz || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # 3. Backend FastAPI Service
+  backend:
+    build:
+      context: ./backend # Tells Docker Compose to look for a Dockerfile in the 'backend' folder
+    ports:
+      - '8000:8000'
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./backend/app:/app/app # Mount your local code into the container for live-reloading
+      - ./uploads:/app/uploads # Mount a local folder for file uploads
+    # We will create this .env file in the next steps
+    # env_file:
+    #   - ./backend/.env
+    restart: always
+
+  # 4. Frontend Next.js Service
+  frontend:
+    build:
+      context: ./frontend # Tells Docker Compose to look for a Dockerfile in the 'frontend' folder
+    ports:
+      - '3000:3000'
+    depends_on:
+      - hasura
+      - backend
+    # We will create this .env.local file in the next steps
+    # env_file:
+    #   - ./frontend/.env.local
+    restart: always
+
+# Define the named volume for persisting database data
+volumes:
+  postgres_data:

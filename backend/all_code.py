@@ -1,0 +1,1960 @@
+"""
+API v1 router.
+"""
+
+from fastapi import APIRouter
+
+from app.api.api_v1.endpoints import documents, auth, mindmaps
+
+api_router = APIRouter()
+
+# Include endpoint routers
+api_router.include_router(auth.router, prefix="/auth", tags=["authentication"])
+api_router.include_router(documents.router, prefix="/documents", tags=["documents"])
+api_router.include_router(mindmaps.router, prefix="/mindmaps", tags=["mindmaps"])
+from datetime import datetime, timedelta
+from typing import Optional
+from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from sqlalchemy.orm import Session
+from passlib.context import CryptContext
+from jose import JWTError, jwt
+import uuid
+
+from app.core.config import settings
+from app.core.database import get_db
+from app.schemas.auth import (
+    UserCreate, 
+    UserResponse, 
+    LoginRequest, 
+    LoginResponse, 
+    TokenData,
+    UserUpdate
+)
+from app.models.database import User, UserRole
+from app.repositories.base import BaseRepository
+
+router = APIRouter()
+security = HTTPBearer()
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+
+class UserRepository(BaseRepository[User]):
+    def __init__(self, db: Session):
+        super().__init__(db, User)
+    
+    def get_by_email(self, email: str) -> Optional[User]:
+        """Get user by email address."""
+        return self.db.query(User).filter(User.email == email).first()
+    
+    def create_user(self, user_data: UserCreate) -> User:
+        """Create a new user with hashed password."""
+        hashed_password = pwd_context.hash(user_data.password)
+        
+        user_dict = {
+            "id": uuid.uuid4(),
+            "email": user_data.email,
+            "password_hash": hashed_password,
+            "first_name": user_data.first_name,
+            "last_name": user_data.last_name,
+            "role": user_data.role,
+            "email_verified": False,
+            "is_active": True,
+        }
+        
+        return self.create(user_dict)
+    
+    def verify_password(self, plain_password: str, hashed_password: str) -> bool:
+        """Verify password against hash."""
+        return pwd_context.verify(plain_password, hashed_password)
+    
+    def update_last_login(self, user_id: uuid.UUID) -> None:
+        """Update user's last login timestamp."""
+        user = self.get(user_id)
+        if user:
+            self.update(user, {"last_login": datetime.utcnow()})
+
+
+def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
+    """Create JWT access token."""
+    to_encode = data.copy()
+    if expires_delta:
+        expire = datetime.utcnow() + expires_delta
+    else:
+        expire = datetime.utcnow() + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+    
+    to_encode.update({"exp": expire})
+    encoded_jwt = jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
+    return encoded_jwt
+
+
+def get_current_user(
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    db: Session = Depends(get_db)
+) -> User:
+    """Get current authenticated user from JWT token."""
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    
+    try:
+        payload = jwt.decode(credentials.credentials, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        user_id: str = payload.get("sub")
+        if user_id is None:
+            raise credentials_exception
+        token_data = TokenData(user_id=user_id)
+    except JWTError:
+        raise credentials_exception
+    
+    user_repo = UserRepository(db)
+    user = user_repo.get(uuid.UUID(token_data.user_id))
+    if user is None:
+        raise credentials_exception
+    
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Inactive user"
+        )
+    
+    return user
+
+
+def get_current_active_user(current_user: User = Depends(get_current_user)) -> User:
+    """Get current active user."""
+    if not current_user.is_active:
+        raise HTTPException(status_code=400, detail="Inactive user")
+    return current_user
+
+
+@router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
+async def register_user(user_data: UserCreate, db: Session = Depends(get_db)):
+    """
+    Register a new user account.
+    """
+    user_repo = UserRepository(db)
+    
+    # Check if user already exists
+    existing_user = user_repo.get_by_email(user_data.email)
+    if existing_user:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Email already registered"
+        )
+    
+    # Create new user
+    try:
+        user = user_repo.create_user(user_data)
+        return UserResponse(
+            id=str(user.id),
+            email=user.email,
+            first_name=user.first_name,
+            last_name=user.last_name,
+            role=user.role,
+            avatar_url=user.avatar_url,
+            email_verified=user.email_verified,
+            is_active=user.is_active,
+            created_at=user.created_at,
+            updated_at=user.updated_at,
+            last_login=user.last_login,
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to create user account"
+        )
+
+
+@router.post("/login", response_model=LoginResponse)
+async def login_for_access_token(login_data: LoginRequest, db: Session = Depends(get_db)):
+    """
+    Authenticate user and return access token.
+    """
+    user_repo = UserRepository(db)
+    
+    # Get user by email
+    user = user_repo.get_by_email(login_data.email)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect email or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    # Verify password
+    if not user_repo.verify_password(login_data.password, user.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect email or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    # Check if user is active
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Account is deactivated"
+        )
+    
+    # Create access token
+    access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = create_access_token(
+        data={"sub": str(user.id), "email": user.email, "role": user.role},
+        expires_delta=access_token_expires
+    )
+    
+    # Update last login
+    user_repo.update_last_login(user.id)
+    
+    return LoginResponse(
+        access_token=access_token,
+        token_type="bearer",
+        expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        user=UserResponse(
+            id=str(user.id),
+            email=user.email,
+            first_name=user.first_name,
+            last_name=user.last_name,
+            role=user.role,
+            avatar_url=user.avatar_url,
+            email_verified=user.email_verified,
+            is_active=user.is_active,
+            created_at=user.created_at,
+            updated_at=user.updated_at,
+            last_login=user.last_login,
+        )
+    )
+
+
+@router.get("/me", response_model=UserResponse)
+async def read_users_me(current_user: User = Depends(get_current_active_user)):
+    """
+    Get current authenticated user's details.
+    """
+    return UserResponse(
+        id=str(current_user.id),
+        email=current_user.email,
+        first_name=current_user.first_name,
+        last_name=current_user.last_name,
+        role=current_user.role,
+        avatar_url=current_user.avatar_url,
+        email_verified=current_user.email_verified,
+        is_active=current_user.is_active,
+        created_at=current_user.created_at,
+        updated_at=current_user.updated_at,
+        last_login=current_user.last_login,
+    )
+
+
+@router.put("/me", response_model=UserResponse)
+async def update_user_profile(
+    user_update: UserUpdate,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Update current user's profile.
+    """
+    user_repo = UserRepository(db)
+    
+    # Only allow updating certain fields
+    update_data = {}
+    if user_update.first_name is not None:
+        update_data["first_name"] = user_update.first_name
+    if user_update.last_name is not None:
+        update_data["last_name"] = user_update.last_name
+    if user_update.avatar_url is not None:
+        update_data["avatar_url"] = user_update.avatar_url
+    
+    if not update_data:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No valid fields to update"
+        )
+    
+    updated_user = user_repo.update(current_user, update_data)
+    
+    return UserResponse(
+        id=str(updated_user.id),
+        email=updated_user.email,
+        first_name=updated_user.first_name,
+        last_name=updated_user.last_name,
+        role=updated_user.role,
+        avatar_url=updated_user.avatar_url,
+        email_verified=updated_user.email_verified,
+        is_active=updated_user.is_active,
+        created_at=updated_user.created_at,
+        updated_at=updated_user.updated_at,
+        last_login=updated_user.last_login,
+    )
+
+
+@router.post("/refresh", response_model=LoginResponse)
+async def refresh_access_token(current_user: User = Depends(get_current_active_user)):
+    """
+    Refresh access token for current user.# app/api/api_v1/endpoints/documents.py
+"""
+Document processing endpoints with proper database integration.
+"""
+
+import os
+import uuid
+import aiofiles
+from typing import List, Optional
+from pathlib import Path
+from fastapi import APIRouter, UploadFile, File, HTTPException, Depends, BackgroundTasks, Query
+from fastapi.responses import JSONResponse
+from sqlalchemy.orm import Session
+from loguru import logger
+import time
+
+from app.core.config import settings
+from app.core.database import get_db
+from app.services.document_processor import document_processor
+from app.schemas.document import (
+    DocumentResponse, 
+    DocumentProcessResponse, 
+    DocumentListResponse,
+    ProcessedDocument
+)
+from app.repositories.document_repository import DocumentRepository
+from app.models.database import DocumentStatus
+
+router = APIRouter()
+
+
+@router.post("/upload", response_model=DocumentResponse)
+async def upload_document(
+    background_tasks: BackgroundTasks,
+    file: UploadFile = File(...),
+    title: Optional[str] = None,
+    db: Session = Depends(get_db),
+):
+    """
+    Upload and process a document.
+    
+    Supported formats: PDF, DOCX, TXT, PPTX
+    Maximum file size: 50MB
+    """
+    start_time = time.time()
+    document_repo = DocumentRepository(db)
+    
+    try:
+        # Validate file
+        if not file.filename:
+            raise HTTPException(status_code=400, detail="No filename provided")
+        
+        # Check file extension
+        file_extension = Path(file.filename).suffix.lower()
+        if file_extension not in settings.ALLOWED_EXTENSIONS:
+            raise HTTPException(
+                status_code=400,
+                detail=f"File type {file_extension} not supported. Allowed: {settings.ALLOWED_EXTENSIONS}"
+            )
+        
+        # Read file content
+        content = await file.read()
+        
+        # Check file size
+        if len(content) > settings.MAX_FILE_SIZE:
+            raise HTTPException(
+                status_code=413,
+                detail=f"File too large. Maximum size: {settings.MAX_FILE_SIZE // (1024*1024)}MB"
+            )
+        
+        # Generate unique filename and document ID
+        document_id = str(uuid.uuid4())
+        safe_filename = f"{document_id}{file_extension}"
+        
+        # Ensure upload directory exists
+        upload_dir = Path(settings.UPLOAD_DIR)
+        upload_dir.mkdir(exist_ok=True)
+        
+        # Save file
+        file_path = upload_dir / safe_filename
+        
+        async with aiofiles.open(file_path, 'wb') as f:
+            await f.write(content)
+        
+        logger.info(f"File uploaded successfully: {safe_filename}")
+        
+        # Create document record in database
+        document_data = {
+            "id": uuid.UUID(document_id),
+            "title": title or file.filename,
+            "file_name": file.filename,
+            "file_path": str(file_path),
+            "file_size": len(content),
+            "mime_type": file.content_type or "application/octet-stream",
+            "uploaded_by": uuid.UUID("00000000-0000-0000-0000-000000000001"),  # TODO: Get from JWT
+            "status": DocumentStatus.UPLOADED,
+        }
+        
+        document = document_repo.create(document_data)
+        
+        # Schedule background processing
+        background_tasks.add_task(
+            process_document_background,
+            document_id,
+            str(file_path),
+            file_extension[1:],  # Remove the dot
+            file.filename
+        )
+        
+        processing_time = time.time() - start_time
+        
+        return DocumentResponse(
+            id=str(document.id),
+            filename=document.file_name,
+            file_path=document.file_path,
+            file_size=document.file_size,
+            mime_type=document.mime_type,
+            status=document.status,
+            message="Document uploaded successfully. Processing in background.",
+            processing_time=processing_time
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error uploading document: {str(e)}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@router.get("", response_model=DocumentListResponse)
+async def get_documents(
+    skip: int = Query(0, ge=0),
+    limit: int = Query(10, ge=1, le=100),
+    user_id: Optional[str] = Query(None),
+    status: Optional[DocumentStatus] = Query(None),
+    db: Session = Depends(get_db),
+):
+    """
+    Get list of documents with filtering and pagination.
+    """
+    try:
+        document_repo = DocumentRepository(db)
+        
+        # Build filters
+        filters = {}
+        if user_id:
+            filters["uploaded_by"] = uuid.UUID(user_id)
+        if status:
+            filters["status"] = status
+        
+        # Get documents
+        documents = document_repo.get_multi(skip=skip, limit=limit, filters=filters)
+        total = document_repo.count(filters=filters)
+        
+        # Convert to response format
+        document_responses = [
+            DocumentResponse(
+                id=str(doc.id),
+                filename=doc.file_name,
+                file_path=doc.file_path,
+                file_size=doc.file_size,
+                mime_type=doc.mime_type,
+                status=doc.status,
+                message="",
+                created_at=doc.created_at,
+                title=doc.title,
+                processed=doc.processed,
+                word_count=doc.word_count or 0,
+                sentence_count=doc.sentence_count or 0,
+            )
+            for doc in documents
+        ]
+        
+        return DocumentListResponse(
+            documents=document_responses,
+            total=total,
+            page=skip // limit + 1,
+            per_page=limit,
+            has_next=skip + limit < total,
+            has_prev=skip > 0,
+        )
+        
+    except Exception as e:
+        logger.error(f"Error getting documents: {str(e)}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@router.get("/{document_id}", response_model=ProcessedDocument)
+async def get_document_by_id(
+    document_id: str,
+    db: Session = Depends(get_db),
+):
+    """
+    Get a specific document by ID with full processing details.
+    """
+    try:
+        document_repo = DocumentRepository(db)
+        document = document_repo.get(uuid.UUID(document_id))
+        
+        if not document:
+            raise HTTPException(status_code=404, detail="Document not found")
+        
+        # Convert processed_chunks from JSONB to list of objects
+        chunks = []
+        if document.processed_chunks:
+            chunks = [
+                {
+                    "id": chunk.get("id", 0),
+                    "text": chunk.get("text", ""),
+                    "start_sentence": chunk.get("start_sentence", 0),
+                    "end_sentence": chunk.get("end_sentence", 0),
+                    "sentence_count": chunk.get("sentence_count", 0),
+                }
+                for chunk in document.processed_chunks
+            ]
+        
+        return ProcessedDocument(
+            document_id=str(document.id),
+            filename=document.file_name,
+            title=document.title,
+            raw_text=document.raw_text or "",
+            cleaned_text=document.raw_text or "",  # TODO: Store cleaned text separately
+            metadata=document.metadata or {},
+            sentences=document.raw_text.split(".") if document.raw_text else [],
+            sections=document.sections or [],
+            entities=document.entities or [],
+            key_phrases=[],  # TODO: Extract from processed data
+            chunks=chunks,
+            word_count=document.word_count or 0,
+            sentence_count=document.sentence_count or 0,
+            processing_time=document.processing_time or 0,
+            created_at=document.created_at,
+            updated_at=document.updated_at,
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting document {document_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@router.post("/process/{document_id}", response_model=DocumentProcessResponse)
+async def process_document(
+    document_id: str,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+):
+    """
+    Process or reprocess a specific document by ID.
+    """
+    try:
+        document_repo = DocumentRepository(db)
+        document = document_repo.get(uuid.UUID(document_id))
+        
+        if not document:
+            raise HTTPException(status_code=404, detail="Document not found")
+        
+        # Check if file still exists
+        if not Path(document.file_path).exists():
+            raise HTTPException(status_code=404, detail="Document file not found")
+        
+        # Update status to processing
+        document_repo.update_processing_status(
+            document_id, 
+            DocumentStatus.PROCESSING
+        )
+        
+        # Schedule background processing
+        file_extension = Path(document.file_path).suffix[1:]  # Remove dot
+        background_tasks.add_task(
+            process_document_background,
+            document_id,
+            document.file_path,
+            file_extension,
+            document.file_name
+        )
+        
+        return DocumentProcessResponse(
+            document_id=document_id,
+            status=DocumentStatus.PROCESSING,
+            message="Document processing started",
+            raw_text_length=len(document.raw_text) if document.raw_text else 0,
+            processed_chunks=len(document.processed_chunks) if document.processed_chunks else 0,
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error processing document {document_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@router.get("/status/{document_id}")
+async def get_document_status(
+    document_id: str,
+    db: Session = Depends(get_db),
+):
+    """Get the processing status of a document."""
+    try:
+        document_repo = DocumentRepository(db)
+        document = document_repo.get(uuid.UUID(document_id))
+        
+        if not document:
+            raise HTTPException(status_code=404, detail="Document not found")
+        
+        return {
+            "document_id": document_id,
+            "status": document.status,
+            "processed": document.processed,
+            "message": f"Document is {document.status.lower()}",
+            "word_count": document.word_count or 0,
+            "sentence_count": document.sentence_count or 0,
+            "processing_time": document.processing_time,
+            "created_at": document.created_at,
+            "updated_at": document.updated_at,
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting document status: {str(e)}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@router.delete("/{document_id}")
+async def delete_document(
+    document_id: str,
+    db: Session = Depends(get_db),
+):
+    """Delete a document and its associated files."""
+    try:
+        document_repo = DocumentRepository(db)
+        document = document_repo.get(uuid.UUID(document_id))
+        
+        if not document:
+            raise HTTPException(status_code=404, detail="Document not found")
+        
+        # Delete file from storage
+        try:
+            if Path(document.file_path).exists():
+                Path(document.file_path).unlink()
+                logger.info(f"Deleted file: {document.file_path}")
+        except Exception as e:
+            logger.warning(f"Could not delete file {document.file_path}: {e}")
+        
+        # Delete database record
+        success = document_repo.delete(uuid.UUID(document_id))
+        
+        if success:
+            return {
+                "message": f"Document {document_id} deleted successfully",
+                "status": "success"
+            }
+        else:
+            raise HTTPException(status_code=500, detail="Failed to delete document")
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error deleting document: {str(e)}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+async def process_document_background(
+    document_id: str, 
+    file_path: str, 
+    file_type: str, 
+    original_filename: str
+):
+    """
+    Background task to process document and save results to database.
+    """
+    from app.core.database import create_db_session
+    
+    db = None
+    processing_start_time = time.time()
+    
+    try:
+        logger.info(f"Starting background processing for document {document_id}")
+        
+        # Create database session for background task
+        db = create_db_session()
+        document_repo = DocumentRepository(db)
+        
+        # Update status to processing
+        document_repo.update_processing_status(
+            document_id, 
+            DocumentStatus.PROCESSING
+        )
+        
+        # Extract text
+        extraction_result = await document_processor.extract_text(file_path, file_type)
+        raw_text = extraction_result["raw_text"]
+        metadata = extraction_result["metadata"]
+        
+        # Preprocess text
+        preprocessing_result = await document_processor.preprocess_text(raw_text)
+        
+        # Calculate processing time
+        processing_time = int(time.time() - processing_start_time)
+        
+        # Update document with results
+        update_data = {
+            "raw_text": raw_text,
+            "processed_chunks": preprocessing_result["chunks"],
+            "metadata": metadata,
+            "entities": [{"text": ent[0], "label": ent[1]} for ent in preprocessing_result["entities"]],
+            "key_phrases": preprocessing_result["key_phrases"],
+            "sections": preprocessing_result["sections"],
+            "word_count": preprocessing_result["word_count"],
+            "sentence_count": preprocessing_result["sentence_count"],
+            "processed": True,
+            "status": DocumentStatus.COMPLETED,
+            "processing_time": processing_time,
+        }
+        
+        document_repo.update_processing_status(document_id, DocumentStatus.COMPLETED, **update_data)
+        
+        logger.info(f"Document {document_id} processed successfully:")
+        logger.info(f"- Raw text length: {len(raw_text)}")
+        logger.info(f"- Sentences: {preprocessing_result['sentence_count']}")
+        logger.info(f"- Chunks: {len(preprocessing_result['chunks'])}")
+        logger.info(f"- Entities: {len(preprocessing_result['entities'])}")
+        logger.info(f"- Processing time: {processing_time}s")
+        
+    except Exception as e:
+        logger.error(f"Error in background processing for document {document_id}: {str(e)}")
+        
+        # Update document status to failed
+        if db:
+            try:
+                document_repo = DocumentRepository(db)
+                document_repo.update_processing_status(
+                    document_id, 
+                    DocumentStatus.FAILED,
+                    processing_time=int(time.time() - processing_start_time)
+                )
+            except Exception as db_error:
+                logger.error(f"Failed to update document status to failed: {db_error}")
+        
+    finally:
+        if db:
+            db.close()"""
+Mind map generation and management endpoints.
+"""
+from fastapi import APIRouter, HTTPException, BackgroundTasks, Depends
+from pydantic import BaseModel
+
+# In a real application, you would have schemas and services
+# from app.services.mindmap_generator import mindmap_generator
+
+router = APIRouter()
+
+
+class MindmapRequest(BaseModel):
+    document_id: str
+    generation_strategy: str = "default"
+
+
+@router.post("/generate", status_code=202)
+async def generate_mindmap(
+    request: MindmapRequest,
+    background_tasks: BackgroundTasks
+):
+    """
+    Start the mind map generation process for a given document.
+    (Placeholder)
+    """
+    # In a real implementation, you would trigger a background task
+    # to generate the mind map from the processed document text.
+    # background_tasks.add_task(mindmap_generator.generate, request.document_id)
+    
+    return {
+        "message": "Mind map generation has been queued.",
+        "document_id": request.document_id,
+        "status": "processing"
+    }
+
+
+@router.get("/{document_id}/status")
+async def get_mindmap_status(document_id: str):
+    """
+    Get the status of a mind map generation task.
+    (Placeholder)
+    """
+    # This would query your database or cache for the status.
+    return {
+        "document_id": document_id,
+        "status": "pending", # or "completed", "failed"
+        "message": "Status check not fully implemented."
+    }
+
+
+@router.get("/{document_id}")
+async def get_mindmap_data(document_id: str):
+    """
+    Retrieve the generated mind map data.
+    (Placeholder)
+    """
+    # This would fetch the final mind map data from the database.
+    raise HTTPException(status_code=501, detail="Mind map data retrieval not implemented")
+
+from datetime import datetime
+from typing import List, Dict, Optional, Any
+from pydantic import BaseModel, Field, ConfigDict
+
+
+class MindMapNode(BaseModel):
+    """Mind map node structure."""
+    model_config = ConfigDict(from_attributes=True)
+    
+    id: str = Field(..., description="Node identifier")
+    label: str = Field(..., description="Node label")
+    type: str = Field(..., description="Node type (root, branch, leaf)")
+    level: int = Field(..., description="Node level in hierarchy")
+    children: Optional[List['MindMapNode']] = Field(None, description="Child nodes")
+    metadata: Optional[Dict[str, Any]] = Field(None, description="Node metadata")
+
+
+class MindMapEdge(BaseModel):
+    """Mind map edge structure."""
+    model_config = ConfigDict(from_attributes=True)
+    
+    id: str = Field(..., description="Edge identifier")
+    source: str = Field(..., description="Source node ID")
+    target: str = Field(..., description="Target node ID")
+    type: Optional[str] = Field(None, description="Edge type")
+    weight: Optional[float] = Field(None, description="Edge weight")
+
+
+class MindMapStructure(BaseModel):
+    """Mind map structure."""
+    model_config = ConfigDict(from_attributes=True)
+    
+    nodes: List[MindMapNode] = Field(..., description="Mind map nodes")
+    edges: Optional[List[MindMapEdge]] = Field(None, description="Mind map edges")
+    metadata: Optional[Dict[str, Any]] = Field(None, description="Structure metadata")
+
+
+class MindMapResponse(BaseModel):
+    """Mind map response schema."""
+    model_config = ConfigDict(from_attributes=True)
+    
+    id: str = Field(..., description="Mind map identifier")
+    document_id: str = Field(..., description="Source document ID")
+    title: str = Field(..., description="Mind map title")
+    structure: MindMapStructure = Field(..., description="Mind map structure")
+    created_by: str = Field(..., description="Creator user ID")
+    is_public: bool = Field(..., description="Public visibility")
+    created_at: datetime = Field(..., description="Creation timestamp")
+    updated_at: datetime = Field(..., description="Last update timestamp")
+
+
+class MindMapCreateRequest(BaseModel):
+    """Mind map creation request."""
+    model_config = ConfigDict(from_attributes=True)
+    
+    document_id: str = Field(..., description="Source document ID")
+    title: Optional[str] = Field(None, description="Mind map title")
+    generation_strategy: str = Field(default="default", description="Generation strategy")
+    is_public: bool = Field(default=False, description="Public visibility")
+
+
+# Fix forward reference
+MindMapNode.model_rebuild()
+from datetime import datetime
+from typing import List, Dict, Optional, Any, Union
+from pydantic import BaseModel, Field, ConfigDict
+from enum import Enum
+
+
+class DocumentStatus(str, Enum):
+    """Document processing status."""
+    UPLOADED = "uploaded"
+    PROCESSING = "processing"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+
+class DocumentResponse(BaseModel):
+    """Response model for document operations."""
+    model_config = ConfigDict(from_attributes=True)
+    
+    id: str = Field(..., description="Unique document identifier")
+    filename: str = Field(..., description="Original filename")
+    title: Optional[str] = Field(None, description="Document title")
+    file_path: str = Field(..., description="Server file path")
+    file_size: int = Field(..., description="File size in bytes")
+    mime_type: str = Field(..., description="MIME type of the file")
+    status: DocumentStatus = Field(..., description="Processing status")
+    message: str = Field(..., description="Status message")
+    processed: Optional[bool] = Field(None, description="Whether document is processed")
+    word_count: Optional[int] = Field(None, description="Total word count")
+    sentence_count: Optional[int] = Field(None, description="Total sentence count")
+    processing_time: Optional[float] = Field(None, description="Processing time in seconds")
+    created_at: datetime = Field(..., description="Creation timestamp")
+    updated_at: Optional[datetime] = Field(None, description="Last update timestamp")
+
+
+class DocumentProcessResponse(BaseModel):
+    """Response model for document processing."""
+    model_config = ConfigDict(from_attributes=True)
+    
+    document_id: str = Field(..., description="Document identifier")
+    status: DocumentStatus = Field(..., description="Processing status")
+    message: str = Field(..., description="Processing message")
+    raw_text_length: int = Field(0, description="Length of extracted raw text")
+    processed_chunks: int = Field(0, description="Number of processed text chunks")
+    entities_count: Optional[int] = Field(None, description="Number of extracted entities")
+    sections_count: Optional[int] = Field(None, description="Number of identified sections")
+    processing_time: Optional[float] = Field(None, description="Processing time in seconds")
+    error_details: Optional[str] = Field(None, description="Error details if processing failed")
+
+
+class DocumentMetadata(BaseModel):
+    """Document metadata structure."""
+    model_config = ConfigDict(from_attributes=True)
+    
+    pages: Optional[int] = Field(None, description="Number of pages (for PDF)")
+    slides: Optional[int] = Field(None, description="Number of slides (for PPTX)")
+    paragraphs: Optional[int] = Field(None, description="Number of paragraphs (for DOCX)")
+    lines: Optional[int] = Field(None, description="Number of lines (for TXT)")
+    characters: Optional[int] = Field(None, description="Character count")
+    title: Optional[str] = Field(None, description="Document title")
+    author: Optional[str] = Field(None, description="Document author")
+    headings: Optional[List[Dict[str, Any]]] = Field(None, description="Document headings")
+
+
+class TextChunk(BaseModel):
+    """Text chunk structure."""
+    model_config = ConfigDict(from_attributes=True)
+    
+    id: int = Field(..., description="Chunk identifier")
+    text: str = Field(..., description="Chunk text content")
+    start_sentence: int = Field(..., description="Starting sentence index")
+    end_sentence: int = Field(..., description="Ending sentence index")
+    sentence_count: int = Field(..., description="Number of sentences in chunk")
+
+
+class EntityExtraction(BaseModel):
+    """Named entity extraction result."""
+    model_config = ConfigDict(from_attributes=True)
+    
+    text: str = Field(..., description="Entity text")
+    label: str = Field(..., description="Entity label/type")
+    start_pos: Optional[int] = Field(None, description="Start position in text")
+    end_pos: Optional[int] = Field(None, description="End position in text")
+
+
+class DocumentSection(BaseModel):
+    """Document section structure."""
+    model_config = ConfigDict(from_attributes=True)
+    
+    heading: str = Field(..., description="Section heading")
+    content: str = Field(..., description="Section content")
+    level: Optional[int] = Field(None, description="Heading level")
+    start_pos: Optional[int] = Field(None, description="Start position in document")
+    end_pos: Optional[int] = Field(None, description="End position in document")
+
+
+class ProcessedDocument(BaseModel):
+    """Complete processed document structure."""
+    model_config = ConfigDict(from_attributes=True)
+    
+    document_id: str = Field(..., description="Document identifier")
+    filename: str = Field(..., description="Original filename")
+    title: str = Field(..., description="Document title")
+    raw_text: str = Field(..., description="Raw extracted text")
+    cleaned_text: str = Field(..., description="Cleaned and preprocessed text")
+    metadata: Union[DocumentMetadata, Dict[str, Any]] = Field(..., description="Document metadata")
+    sentences: List[str] = Field(..., description="Extracted sentences")
+    sections: List[Union[DocumentSection, Dict[str, Any]]] = Field(..., description="Document sections")
+    entities: List[Union[EntityExtraction, Dict[str, Any]]] = Field(..., description="Named entities")
+    key_phrases: List[str] = Field(..., description="Extracted key phrases")
+    chunks: List[Union[TextChunk, Dict[str, Any]]] = Field(..., description="Text chunks")
+    word_count: int = Field(..., description="Total word count")
+    sentence_count: int = Field(..., description="Total sentence count")
+    processing_time: float = Field(..., description="Processing time in seconds")
+    created_at: datetime = Field(..., description="Creation timestamp")
+    updated_at: datetime = Field(..., description="Last update timestamp")
+
+
+class DocumentListResponse(BaseModel):
+    """Response for listing documents."""
+    model_config = ConfigDict(from_attributes=True)
+    
+    documents: List[DocumentResponse] = Field(..., description="List of documents")
+    total: int = Field(..., description="Total number of documents")
+    page: int = Field(..., description="Current page number")
+    per_page: int = Field(..., description="Items per page")
+    has_next: bool = Field(..., description="Whether there are more pages")
+    has_prev: bool = Field(..., description="Whether there are previous pages")
+
+
+class DocumentUploadRequest(BaseModel):
+    """Request model for document upload metadata."""
+    model_config = ConfigDict(from_attributes=True)
+    
+    title: Optional[str] = Field(None, description="Document title")
+    description: Optional[str] = Field(None, description="Document description")
+
+from datetime import datetime
+from typing import Optional
+from pydantic import BaseModel, EmailStr, Field, ConfigDict
+from enum import Enum
+
+
+class UserRole(str, Enum):
+    """User roles in the system."""
+    ADMIN = "ADMIN"
+    INSTRUCTOR = "INSTRUCTOR"
+    STUDENT = "STUDENT"
+
+
+class UserBase(BaseModel):
+    """Base user schema."""
+    email: EmailStr = Field(..., description="User email address")
+    first_name: str = Field(..., min_length=1, max_length=100, description="First name")
+    last_name: str = Field(..., min_length=1, max_length=100, description="Last name")
+    role: UserRole = Field(default=UserRole.STUDENT, description="User role")
+
+
+class UserCreate(UserBase):
+    """Schema for user creation."""
+    password: str = Field(..., min_length=8, description="User password")
+
+
+class UserUpdate(BaseModel):
+    """Schema for user updates."""
+    model_config = ConfigDict(from_attributes=True)
+    
+    first_name: Optional[str] = Field(None, min_length=1, max_length=100)
+    last_name: Optional[str] = Field(None, min_length=1, max_length=100)
+    avatar_url: Optional[str] = Field(None, max_length=500)
+    is_active: Optional[bool] = Field(None)
+
+
+class UserResponse(UserBase):
+    """Schema for user responses."""
+    model_config = ConfigDict(from_attributes=True)
+    
+    id: str = Field(..., description="User ID")
+    avatar_url: Optional[str] = Field(None, description="User avatar URL")
+    email_verified: bool = Field(..., description="Email verification status")
+    is_active: bool = Field(..., description="Account active status")
+    created_at: datetime = Field(..., description="Account creation timestamp")
+    updated_at: datetime = Field(..., description="Last update timestamp")
+    last_login: Optional[datetime] = Field(None, description="Last login timestamp")
+
+
+class LoginRequest(BaseModel):
+    """Schema for login requests."""
+    email: EmailStr = Field(..., description="User email")
+    password: str = Field(..., description="User password")
+
+
+class LoginResponse(BaseModel):
+    """Schema for login responses."""
+    model_config = ConfigDict(from_attributes=True)
+    
+    access_token: str = Field(..., description="JWT access token")
+    token_type: str = Field(default="bearer", description="Token type")
+    expires_in: int = Field(..., description="Token expiration time in seconds")
+    user: UserResponse = Field(..., description="User information")
+
+
+class TokenData(BaseModel):
+    """Schema for token data."""
+    user_id: Optional[str] = None
+    email: Optional[str] = None
+    role: Optional[str] = None
+"""
+FastAPI main application.
+"""
+
+from contextlib import asynccontextmanager
+from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.trustedhost import TrustedHostMiddleware
+from fastapi.responses import JSONResponse
+from loguru import logger
+import time
+
+from app.api.api_v1.api import api_router
+from app.core.config import settings
+from app.core.database import connect_to_db, close_db_connection
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Application lifespan manager."""
+    # Startup
+    logger.info("Starting up MindMap API...")
+    await connect_to_db()
+    logger.info("Database connected successfully")
+    yield
+    # Shutdown
+    logger.info("Shutting down MindMap API...")
+    await close_db_connection()
+    logger.info("Database disconnected successfully")
+
+
+# Create FastAPI application
+app = FastAPI(
+    title="MindMap API",
+    description="Professional AI-powered mind map generation API",
+    version="1.0.0",
+    openapi_url=f"{settings.API_V1_STR}/openapi.json",
+    docs_url=f"{settings.API_V1_STR}/docs",
+    redoc_url=f"{settings.API_V1_STR}/redoc",
+    lifespan=lifespan,
+)
+
+
+# Add middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[str(origin) for origin in settings.BACKEND_CORS_ORIGINS],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+app.add_middleware(
+    TrustedHostMiddleware, 
+    allowed_hosts=["localhost", "127.0.0.1", "*.localhost"]
+)
+
+
+@app.middleware("http")
+async def add_process_time_header(request: Request, call_next):
+    """Add processing time to response headers."""
+    start_time = time.time()
+    response = await call_next(request)
+    process_time = time.time() - start_time
+    response.headers["X-Process-Time"] = str(process_time)
+    return response
+
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    """Global exception handler."""
+    logger.error(f"Global exception handler caught: {exc}")
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Internal server error"}
+    )
+
+
+# Include API routes
+app.include_router(api_router, prefix=settings.API_V1_STR)
+
+
+@app.get("/")
+async def root():
+    """Root endpoint."""
+    return {
+        "message": "MindMap API",
+        "version": "1.0.0",
+        "status": "operational",
+        "docs": f"{settings.SERVER_HOST}{settings.API_V1_STR}/docs"
+    }
+
+
+@app.get("/health")
+async def health_check():
+    """Health check endpoint."""
+    return {
+        "status": "healthy",
+        "timestamp": time.time()
+    }"""
+Application configuration settings.
+"""
+
+import secrets
+from typing import List, Optional, Union
+
+from pydantic import AnyHttpUrl, EmailStr, field_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class Settings(BaseSettings):
+    """Application settings."""
+    
+    # API Configuration
+    API_V1_STR: str = "/api/v1"
+    SECRET_KEY: str = secrets.token_urlsafe(32)
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 8  # 8 days
+    
+    # Server Configuration
+    SERVER_NAME: str = "MindMap API"
+    SERVER_HOST: AnyHttpUrl = "http://localhost:8000"
+    
+    # CORS Configuration
+    BACKEND_CORS_ORIGINS: List[AnyHttpUrl] = [
+        "http://localhost:3000",
+        "http://localhost:3001",
+        "https://localhost:3000",
+    ]
+
+    @field_validator("BACKEND_CORS_ORIGINS", mode='before')
+    def assemble_cors_origins(cls, v: Union[str, List[str]]) -> Union[List[str], str]:
+        if isinstance(v, str) and not v.startswith("["):
+            return [i.strip() for i in v.split(",")]
+        elif isinstance(v, (list, str)):
+            return v
+        raise ValueError(v)
+
+    # Database Configuration
+    DATABASE_URL: str = "postgresql://pensiveverse:password@localhost:5432/mindmap_app"
+    
+    # Hasura Configuration
+    HASURA_GRAPHQL_ENDPOINT: str = "http://localhost:8080/v1/graphql"
+    HASURA_GRAPHQL_ADMIN_SECRET: str = "your-hasura-admin-secret"
+    
+    # Redis Configuration
+    REDIS_URL: str = "redis://localhost:6379/0"
+    
+    # File Upload Configuration
+    MAX_FILE_SIZE: int = 50 * 1024 * 1024  # 50MB
+    UPLOAD_DIR: str = "uploads"
+    ALLOWED_EXTENSIONS: List[str] = [".pdf", ".docx", ".txt", ".pptx"]
+    
+    # AI/ML Configuration
+    MODEL_CACHE_DIR: str = "models"
+    OPENAI_API_KEY: Optional[str] = None
+    USE_LOCAL_MODELS: bool = True
+    
+    # Logging Configuration
+    LOG_LEVEL: str = "INFO"
+    LOG_FILE: str = "app.log"
+    
+    # Security
+    ALGORITHM: str = "HS256"
+    
+    # Email Configuration (for future use)
+    SMTP_TLS: bool = True
+    SMTP_PORT: Optional[int] = None
+    SMTP_HOST: Optional[str] = None
+    SMTP_USER: Optional[str] = None
+    SMTP_PASSWORD: Optional[str] = None
+    EMAILS_FROM_EMAIL: Optional[EmailStr] = None
+    EMAILS_FROM_NAME: Optional[str] = None
+
+    # Superuser
+    FIRST_SUPERUSER: EmailStr = "admin@example.com"
+    FIRST_SUPERUSER_PASSWORD: str = "admin123"
+
+    # Testing
+    TESTING: bool = False
+    TEST_DATABASE_URL: Optional[str] = None
+
+    # Pydantic V2 model configuration
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        case_sensitive=True,
+        extra='ignore'  # Ignore extra fields from the environment
+    )
+
+
+settings = Settings()
+import os
+import secrets
+from typing import List, Optional, Union
+from pathlib import Path
+
+from pydantic import AnyHttpUrl, EmailStr, field_validator, Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class Settings(BaseSettings):
+    """Application settings with environment validation."""
+    
+    # API Configuration
+    API_V1_STR: str = "/api/v1"
+    SECRET_KEY: str = Field(default_factory=lambda: secrets.token_urlsafe(32))
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 8  # 8 days
+    
+    # Server Configuration
+    SERVER_NAME: str = "MindMap API"
+    SERVER_HOST: AnyHttpUrl = "http://localhost:8000"
+    ENVIRONMENT: str = Field(default="development")
+    
+    # CORS Configuration
+    BACKEND_CORS_ORIGINS: List[AnyHttpUrl] = [
+        "http://localhost:3000",
+        "http://localhost:3001",
+        "https://localhost:3000",
+    ]
+
+    @field_validator("BACKEND_CORS_ORIGINS", mode='before')
+    def assemble_cors_origins(cls, v: Union[str, List[str]]) -> Union[List[str], str]:
+        if isinstance(v, str) and not v.startswith("["):
+            return [i.strip() for i in v.split(",")]
+        elif isinstance(v, (list, str)):
+            return v
+        raise ValueError(v)
+
+    # Database Configuration
+    POSTGRES_SERVER: str = Field(default="localhost")
+    POSTGRES_USER: str = Field(default="pensiveverse")
+    POSTGRES_PASSWORD: str = Field(default="password")
+    POSTGRES_DB: str = Field(default="mindmap_app")
+    POSTGRES_PORT: int = Field(default=5432)
+    
+    @property
+    def DATABASE_URL(self) -> str:
+        return f"postgresql://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}@{self.POSTGRES_SERVER}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
+    
+    # Hasura Configuration
+    HASURA_GRAPHQL_ENDPOINT: str = "http://localhost:8080/v1/graphql"
+    HASURA_GRAPHQL_ADMIN_SECRET: str = "your-hasura-admin-secret"
+    
+    # Redis Configuration (for caching and background tasks)
+    REDIS_URL: str = "redis://localhost:6379/0"
+    
+    # File Upload Configuration
+    MAX_FILE_SIZE: int = 50 * 1024 * 1024  # 50MB
+    UPLOAD_DIR: str = Field(default="uploads")
+    ALLOWED_EXTENSIONS: List[str] = [".pdf", ".docx", ".txt", ".pptx"]
+    
+    # AI/ML Configuration
+    MODEL_CACHE_DIR: str = "models"
+    OPENAI_API_KEY: Optional[str] = None
+    USE_LOCAL_MODELS: bool = True
+    
+    # Logging Configuration
+    LOG_LEVEL: str = "INFO"
+    LOG_FILE: str = "app.log"
+    
+    # Security
+    ALGORITHM: str = "HS256"
+    
+    # Email Configuration (for future use)
+    SMTP_TLS: bool = True
+    SMTP_PORT: Optional[int] = None
+    SMTP_HOST: Optional[str] = None
+    SMTP_USER: Optional[str] = None
+    SMTP_PASSWORD: Optional[str] = None
+    EMAILS_FROM_EMAIL: Optional[EmailStr] = None
+    EMAILS_FROM_NAME: Optional[str] = None
+
+    # Superuser
+    FIRST_SUPERUSER: EmailStr = "admin@example.com"
+    FIRST_SUPERUSER_PASSWORD: str = "admin123"
+
+    # Testing
+    TESTING: bool = False
+    TEST_DATABASE_URL: Optional[str] = None
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        # Ensure upload directory exists
+        Path(self.UPLOAD_DIR).mkdir(exist_ok=True)
+
+    # Pydantic V2 model configuration
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        case_sensitive=True,
+        extra='ignore'
+    )
+
+
+settings = Settings()
+from abc import ABC, abstractmethod
+from typing import Generic, TypeVar, List, Optional, Dict, Any
+from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
+from app.models.database import Base
+
+ModelType = TypeVar("ModelType", bound=Base)
+
+class BaseRepository(Generic[ModelType], ABC):
+    def __init__(self, db: Session, model: type[ModelType]):
+        self.db = db
+        self.model = model
+
+    def create(self, obj_in: Dict[str, Any]) -> ModelType:
+        """Create a new record."""
+        try:
+            db_obj = self.model(**obj_in)
+            self.db.add(db_obj)
+            self.db.commit()
+            self.db.refresh(db_obj)
+            return db_obj
+        except IntegrityError:
+            self.db.rollback()
+            raise
+
+    def get(self, id: Any) -> Optional[ModelType]:
+        """Get record by ID."""
+        return self.db.query(self.model).filter(self.model.id == id).first()
+
+    def get_multi(
+        self, 
+        skip: int = 0, 
+        limit: int = 100,
+        filters: Optional[Dict[str, Any]] = None
+    ) -> List[ModelType]:
+        """Get multiple records with optional filtering."""
+        query = self.db.query(self.model)
+        
+        if filters:
+            for key, value in filters.items():
+                if hasattr(self.model, key):
+                    query = query.filter(getattr(self.model, key) == value)
+        
+        return query.offset(skip).limit(limit).all()
+
+    def update(self, db_obj: ModelType, obj_in: Dict[str, Any]) -> ModelType:
+        """Update an existing record."""
+        try:
+            for field, value in obj_in.items():
+                if hasattr(db_obj, field):
+                    setattr(db_obj, field, value)
+            
+            self.db.commit()
+            self.db.refresh(db_obj)
+            return db_obj
+        except IntegrityError:
+            self.db.rollback()
+            raise
+
+    def delete(self, id: Any) -> bool:
+        """Delete a record by ID."""
+        obj = self.db.query(self.model).filter(self.model.id == id).first()
+        if obj:
+            self.db.delete(obj)
+            self.db.commit()
+            return True
+        return False
+
+    def count(self, filters: Optional[Dict[str, Any]] = None) -> int:
+        """Count records with optional filtering."""
+        query = self.db.query(self.model)
+        
+        if filters:
+            for key, value in filters.items():
+                if hasattr(self.model, key):
+                    query = query.filter(getattr(self.model, key) == value)
+        
+        return query.count()
+
+from typing import List, Optional
+from sqlalchemy.orm import Session, joinedload
+from app.models.database import Document, User, DocumentStatus
+from app.repositories.base import BaseRepository
+
+class DocumentRepository(BaseRepository[Document]):
+    def __init__(self, db: Session):
+        super().__init__(db, Document)
+
+    def get_by_user(self, user_id: str, skip: int = 0, limit: int = 100) -> List[Document]:
+        """Get documents uploaded by a specific user."""
+        return (
+            self.db.query(Document)
+            .options(joinedload(Document.uploaded_by_user))
+            .filter(Document.uploaded_by == user_id)
+            .offset(skip)
+            .limit(limit)
+            .all()
+        )
+
+    def get_processed_documents(self, skip: int = 0, limit: int = 100) -> List[Document]:
+        """Get all processed documents."""
+        return (
+            self.db.query(Document)
+            .options(joinedload(Document.uploaded_by_user))
+            .filter(Document.status == DocumentStatus.COMPLETED)
+            .offset(skip)
+            .limit(limit)
+            .all()
+        )
+
+    def update_processing_status(self, document_id: str, status: DocumentStatus, **kwargs) -> Optional[Document]:
+        """Update document processing status and related fields."""
+        document = self.get(document_id)
+        if document:
+            update_data = {"status": status, **kwargs}
+            return self.update(document, update_data)
+        return None
+
+    def get_by_filename(self, filename: str) -> Optional[Document]:
+        """Get document by filename."""
+        return self.db.query(Document).filter(Document.file_name == filename).first()
+import uuid
+from datetime import datetime
+from typing import Optional, List
+from sqlalchemy import Column, String, Text, Integer, Boolean, DateTime, ForeignKey, JSON, Enum as SQLEnum
+from sqlalchemy.dialects.postgresql import UUID, JSONB
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import relationship
+from enum import Enum
+
+Base = declarative_base()
+
+class UserRole(str, Enum):
+    ADMIN = "ADMIN"
+    INSTRUCTOR = "INSTRUCTOR"
+    STUDENT = "STUDENT"
+
+class DocumentStatus(str, Enum):
+    UPLOADED = "uploaded"
+    PROCESSING = "processing"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+class TestStatus(str, Enum):
+    DRAFT = "DRAFT"
+    PUBLISHED = "PUBLISHED"
+    ARCHIVED = "ARCHIVED"
+
+class User(Base):
+    __tablename__ = "users"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    email = Column(String(255), unique=True, nullable=False, index=True)
+    password_hash = Column(String(255), nullable=False)
+    first_name = Column(String(100), nullable=False)
+    last_name = Column(String(100), nullable=False)
+    role = Column(SQLEnum(UserRole), nullable=False, default=UserRole.STUDENT)
+    avatar_url = Column(String(500), nullable=True)
+    email_verified = Column(Boolean, default=False)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    last_login = Column(DateTime, nullable=True)
+
+    # Relationships
+    documents = relationship("Document", back_populates="uploaded_by_user")
+    tests = relationship("Test", back_populates="instructor")
+    test_attempts = relationship("TestAttempt", back_populates="student")
+
+class Document(Base):
+    __tablename__ = "documents"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    title = Column(String(255), nullable=False)
+    file_name = Column(String(255), nullable=False)
+    file_path = Column(String(500), nullable=False)
+    file_size = Column(Integer, nullable=False)
+    mime_type = Column(String(100), nullable=False)
+    uploaded_by = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    processed = Column(Boolean, default=False)
+    status = Column(SQLEnum(DocumentStatus), default=DocumentStatus.UPLOADED)
+    raw_text = Column(Text, nullable=True)
+    processed_chunks = Column(JSONB, nullable=True)
+    metadata = Column(JSONB, nullable=True)
+    entities = Column(JSONB, nullable=True)
+    key_phrases = Column(JSONB, nullable=True)
+    sections = Column(JSONB, nullable=True)
+    word_count = Column(Integer, default=0)
+    sentence_count = Column(Integer, default=0)
+    processing_time = Column(Integer, nullable=True)  # in seconds
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relationships
+    uploaded_by_user = relationship("User", back_populates="documents")
+    mindmaps = relationship("MindMap", back_populates="document")
+
+class Test(Base):
+    __tablename__ = "tests"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    title = Column(String(255), nullable=False)
+    description = Column(Text, nullable=True)
+    instructor_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    status = Column(SQLEnum(TestStatus), default=TestStatus.DRAFT)
+    time_limit = Column(Integer, nullable=True)  # in minutes
+    max_attempts = Column(Integer, default=1)
+    passing_score = Column(Integer, nullable=True)  # percentage
+    instructions = Column(Text, nullable=True)
+    is_randomized = Column(Boolean, default=False)
+    show_results = Column(Boolean, default=True)
+    allow_review = Column(Boolean, default=True)
+    start_date = Column(DateTime, nullable=True)
+    end_date = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relationships
+    instructor = relationship("User", back_populates="tests")
+    questions = relationship("Question", back_populates="test", cascade="all, delete-orphan")
+    test_attempts = relationship("TestAttempt", back_populates="test")
+
+class Question(Base):
+    __tablename__ = "questions"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    test_id = Column(UUID(as_uuid=True), ForeignKey("tests.id"), nullable=False)
+    question_text = Column(Text, nullable=False)
+    question_type = Column(String(50), nullable=False)  # MCQ, MULTIPLE_SELECT, TRUE_FALSE
+    points = Column(Integer, default=1)
+    order_index = Column(Integer, nullable=False)
+    explanation = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relationships
+    test = relationship("Test", back_populates="questions")
+    options = relationship("QuestionOption", back_populates="question", cascade="all, delete-orphan")
+    responses = relationship("TestResponse", back_populates="question")
+
+class QuestionOption(Base):
+    __tablename__ = "question_options"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    question_id = Column(UUID(as_uuid=True), ForeignKey("questions.id"), nullable=False)
+    option_text = Column(Text, nullable=False)
+    is_correct = Column(Boolean, default=False)
+    order_index = Column(Integer, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    # Relationships
+    question = relationship("Question", back_populates="options")
+
+class TestAttempt(Base):
+    __tablename__ = "test_attempts"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    test_id = Column(UUID(as_uuid=True), ForeignKey("tests.id"), nullable=False)
+    student_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    started_at = Column(DateTime, default=datetime.utcnow)
+    submitted_at = Column(DateTime, nullable=True)
+    time_taken = Column(Integer, nullable=True)  # in seconds
+    score = Column(Integer, nullable=True)  # percentage
+    total_questions = Column(Integer, nullable=False)
+    correct_answers = Column(Integer, default=0)
+    is_completed = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relationships
+    test = relationship("Test", back_populates="test_attempts")
+    student = relationship("User", back_populates="test_attempts")
+    responses = relationship("TestResponse", back_populates="attempt", cascade="all, delete-orphan")
+
+class TestResponse(Base):
+    __tablename__ = "test_responses"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    attempt_id = Column(UUID(as_uuid=True), ForeignKey("test_attempts.id"), nullable=False)
+    question_id = Column(UUID(as_uuid=True), ForeignKey("questions.id"), nullable=False)
+    selected_option_ids = Column(JSONB, nullable=False)  # Array of option IDs
+    is_correct = Column(Boolean, default=False)
+    points_earned = Column(Integer, default=0)
+    time_spent = Column(Integer, nullable=True)  # in seconds
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    # Relationships
+    attempt = relationship("TestAttempt", back_populates="responses")
+    question = relationship("Question", back_populates="responses")
+
+class MindMap(Base):
+    __tablename__ = "mindmaps"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    document_id = Column(UUID(as_uuid=True), ForeignKey("documents.id"), nullable=False)
+    title = Column(String(255), nullable=False)
+    structure = Column(JSONB, nullable=False)
+    created_by = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    is_public = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relationships
+    document = relationship("Document", back_populates="mindmaps")
+    created_by_user = relationship("User")
+
+"""
+Document processing service for extracting and preprocessing text from various file formats.
+"""
+
+import os
+import re
+from typing import Dict, List, Optional, Tuple
+import asyncio
+from pathlib import Path
+
+import spacy
+import nltk
+from nltk.corpus import stopwords
+from nltk.tokenize import sent_tokenize, word_tokenize
+from pypdf import PdfReader
+from docx import Document as DocxDocument
+from pptx import Presentation
+from loguru import logger
+
+from app.core.config import settings
+
+
+class DocumentProcessor:
+    """Professional document processing service."""
+    
+    def __init__(self):
+        """Initialize the document processor."""
+        self.nlp = spacy.load("en_core_web_sm")
+        self.stop_words = set(stopwords.words('english'))
+        self.supported_formats = ['.pdf', '.docx', '.txt', '.pptx']
+        
+    async def extract_text(self, file_path: str, file_type: str) -> Dict[str, any]:
+        """
+        Extract text from various document formats.
+        
+        Args:
+            file_path: Path to the document file
+            file_type: Type of the document (pdf, docx, txt, pptx)
+            
+        Returns:
+            Dictionary containing raw text and metadata
+        """
+        try:
+            if file_type.lower() == 'pdf':
+                return await self._extract_pdf_text(file_path)
+            elif file_type.lower() == 'docx':
+                return await self._extract_docx_text(file_path)
+            elif file_type.lower() == 'txt':
+                return await self._extract_txt_text(file_path)
+            elif file_type.lower() == 'pptx':
+                return await self._extract_pptx_text(file_path)
+            else:
+                raise ValueError(f"Unsupported file type: {file_type}")
+                
+        except Exception as e:
+            logger.error(f"Error extracting text from {file_path}: {str(e)}")
+            raise
+    
+    async def _extract_pdf_text(self, file_path: str) -> Dict[str, any]:
+        """Extract text from PDF files."""
+        def extract_sync():
+            reader = PdfReader(file_path)
+            text = ""
+            metadata = {
+                "pages": len(reader.pages),
+                "title": reader.metadata.get('/Title', '') if reader.metadata else '',
+                "author": reader.metadata.get('/Author', '') if reader.metadata else '',
+            }
+            
+            for page_num, page in enumerate(reader.pages, 1):
+                try:
+                    page_text = page.extract_text()
+                    text += f"\n--- Page {page_num} ---\n{page_text}"
+                except Exception as e:
+                    logger.warning(f"Could not extract text from page {page_num}: {e}")
+                    
+            return {"raw_text": text.strip(), "metadata": metadata}
+        
+        return await asyncio.get_event_loop().run_in_executor(None, extract_sync)
+    
+    async def _extract_docx_text(self, file_path: str) -> Dict[str, any]:
+        """Extract text from DOCX files."""
+        def extract_sync():
+            doc = DocxDocument(file_path)
+            paragraphs = []
+            headings = []
+            
+            for paragraph in doc.paragraphs:
+                if paragraph.text.strip():
+                    # Check if paragraph is a heading
+                    if paragraph.style.name.startswith('Heading'):
+                        headings.append({
+                            "text": paragraph.text.strip(),
+                            "level": int(paragraph.style.name.split()[-1])
+                        })
+                    paragraphs.append(paragraph.text.strip())
+            
+            metadata = {
+                "paragraphs": len(paragraphs),
+                "headings": headings
+            }
+            
+            return {
+                "raw_text": "\n\n".join(paragraphs),
+                "metadata": metadata
+            }
+        
+        return await asyncio.get_event_loop().run_in_executor(None, extract_sync)
+    
+    async def _extract_txt_text(self, file_path: str) -> Dict[str, any]:
+        """Extract text from TXT files."""
+        def extract_sync():
+            with open(file_path, 'r', encoding='utf-8', errors='ignore') as file:
+                text = file.read()
+            
+            lines = text.split('\n')
+            metadata = {
+                "lines": len(lines),
+                "characters": len(text)
+            }
+            
+            return {"raw_text": text, "metadata": metadata}
+        
+        return await asyncio.get_event_loop().run_in_executor(None, extract_sync)
+    
+    async def _extract_pptx_text(self, file_path: str) -> Dict[str, any]:
+        """Extract text from PPTX files."""
+        def extract_sync():
+            presentation = Presentation(file_path)
+            slides_text = []
+            
+            for slide_num, slide in enumerate(presentation.slides, 1):
+                slide_text = f"--- Slide {slide_num} ---\n"
+                
+                for shape in slide.shapes:
+                    if hasattr(shape, "text") and shape.text.strip():
+                        slide_text += shape.text + "\n"
+                
+                slides_text.append(slide_text)
+            
+            metadata = {
+                "slides": len(presentation.slides)
+            }
+            
+            return {
+                "raw_text": "\n\n".join(slides_text),
+                "metadata": metadata
+            }
+        
+        return await asyncio.get_event_loop().run_in_executor(None, extract_sync)
+    
+    async def preprocess_text(self, raw_text: str) -> Dict[str, any]:
+        """
+        Preprocess extracted text for better analysis.
+        
+        Args:
+            raw_text: Raw extracted text
+            
+        Returns:
+            Dictionary containing processed text components
+        """
+        try:
+            # Clean and normalize text
+            cleaned_text = self._clean_text(raw_text)
+            
+            # Split into sentences
+            sentences = sent_tokenize(cleaned_text)
+            
+            # Extract headings and sections
+            sections = self._extract_sections(cleaned_text)
+            
+            # Process with spaCy for advanced NLP
+            doc = self.nlp(cleaned_text)
+            
+            # Extract entities and key phrases
+            entities = [(ent.text, ent.label_) for ent in doc.ents]
+            key_phrases = self._extract_key_phrases(doc)
+            
+            # Create text chunks for processing
+            chunks = self._create_chunks(sentences)
+            
+            return {
+                "cleaned_text": cleaned_text,
+                "sentences": sentences,
+                "sections": sections,
+                "entities": entities,
+                "key_phrases": key_phrases,
+                "chunks": chunks,
+                "word_count": len(doc),
+                "sentence_count": len(sentences)
+            }
+            
+        except Exception as e:
+            logger.error(f"Error preprocessing text: {str(e)}")
+            raise
+    
+    def _clean_text(self, text: str) -> str:
+        """Clean and normalize text."""
+        # Remove extra whitespace
+        text = re.sub(r'\s+', ' ', text)
+        
+        # Remove special characters but keep punctuation
+        text = re.sub(r'[^\w\s\.\,\!\?\;\:\-\(\)]', '', text)
+        
+        # Remove page headers/footers patterns
+        text = re.sub(r'--- Page \d+ ---', '', text)
+        text = re.sub(r'--- Slide \d+ ---', '', text)
+        
+        return text.strip()
+    
+    def _extract_sections(self, text: str) -> List[Dict[str, str]]:
+        """Extract sections and headings from text."""
+        sections = []
+        lines = text.split('\n')
+        
+        current_section = None
+        current_content = []
+        
+        for line in lines:
+            line = line.strip()
+            if not line:
+                continue
+                
+            # Simple heuristic for headings (all caps, short lines, etc.)
+            if (len(line) < 100 and 
+                (line.isupper() or 
+                 re.match(r'^[\d\.\-\s]*[A-Z]', line) or
+                 line.endswith(':'))):
+                
+                # Save previous section
+                if current_section:
+                    sections.append({
+                        "heading": current_section,
+                        "content": " ".join(current_content)
+                    })
+                
+                # Start new section
+                current_section = line
+                current_content = []
+            else:
+                if current_section:
+                    current_content.append(line)
+        
+        # Add final section
+        if current_section and current_content:
+            sections.append({
+                "heading": current_section,
+                "content": " ".join(current_content)
+            })
+        
+        return sections
+    
+    def _extract_key_phrases(self, doc) -> List[str]:
+        """Extract key phrases using spaCy."""
+        key_phrases = []
+        
+        # Extract noun phrases
+        for chunk in doc.noun_chunks:
+            if len(chunk.text.split()) > 1 and chunk.text.lower() not in self.stop_words:
+                key_phrases.append(chunk.text)
+        
+        # Extract named entities
+        for ent in doc.ents:
+            if ent.label_ in ['PERSON', 'ORG', 'GPE', 'PRODUCT', 'EVENT']:
+                key_phrases.append(ent.text)
+        
+        return list(set(key_phrases))
+    
+    def _create_chunks(self, sentences: List[str], chunk_size: int = 5) -> List[Dict[str, any]]:
+        """Create overlapping text chunks for processing."""
+        chunks = []
+        
+        for i in range(0, len(sentences), chunk_size - 1):
+            chunk_sentences = sentences[i:i + chunk_size]
+            chunk_text = " ".join(chunk_sentences)
+            
+            chunks.append({
+                "id": i // (chunk_size - 1),
+                "text": chunk_text,
+                "start_sentence": i,
+                "end_sentence": min(i + chunk_size - 1, len(sentences) - 1),
+                "sentence_count": len(chunk_sentences)
+            })
+            
+            if i + chunk_size >= len(sentences):
+                break
+        
+        return chunks
+
+
+# Global instance
+document_processor = DocumentProcessor()

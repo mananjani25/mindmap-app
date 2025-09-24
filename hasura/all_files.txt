@@ -1,0 +1,423 @@
+===== ./metadata/api_limits.yaml =====
+{}
+===== ./metadata/inherited_roles.yaml =====
+[]
+===== ./metadata/backend_configs.yaml =====
+{}
+===== ./metadata/query_collections.yaml =====
+[]
+===== ./metadata/graphql_schema_introspection.yaml =====
+disabled_for_roles: []
+===== ./metadata/databases/databases.yaml =====
+- name: default
+  kind: postgres
+  configuration:
+    connection_info:
+      database_url:
+        from_env: HASURA_GRAPHQL_DATABASE_URL
+      isolation_level: read-committed
+      pool_settings:
+        connection_lifetime: 600
+        idle_timeout: 180
+        max_connections: 50
+        retries: 1
+      use_prepared_statements: true
+  tables: "!include default/tables/tables.yaml"
+===== ./metadata/databases/default/tables/tables.yaml =====
+- table:
+    name: documents
+    schema: public
+  object_relationships:
+    - name: user
+      using:
+        foreign_key_constraint_on: uploaded_by
+  array_relationships:
+    - name: mindmaps
+      using:
+        foreign_key_constraint_on:
+          column: document_id
+          table:
+            name: mindmaps
+            schema: public
+- table:
+    name: mindmaps
+    schema: public
+  object_relationships:
+    - name: document
+      using:
+        foreign_key_constraint_on: document_id
+    - name: user
+      using:
+        foreign_key_constraint_on: created_by
+- table:
+    name: question_options
+    schema: public
+  object_relationships:
+    - name: question
+      using:
+        foreign_key_constraint_on: question_id
+- table:
+    name: questions
+    schema: public
+  object_relationships:
+    - name: test
+      using:
+        foreign_key_constraint_on: test_id
+  array_relationships:
+    - name: question_options
+      using:
+        foreign_key_constraint_on:
+          column: question_id
+          table:
+            name: question_options
+            schema: public
+    - name: test_responses
+      using:
+        foreign_key_constraint_on:
+          column: question_id
+          table:
+            name: test_responses
+            schema: public
+- table:
+    name: test_attempts
+    schema: public
+  object_relationships:
+    - name: test
+      using:
+        foreign_key_constraint_on: test_id
+    - name: user
+      using:
+        foreign_key_constraint_on: student_id
+  array_relationships:
+    - name: test_responses
+      using:
+        foreign_key_constraint_on:
+          column: attempt_id
+          table:
+            name: test_responses
+            schema: public
+- table:
+    name: test_responses
+    schema: public
+  object_relationships:
+    - name: question
+      using:
+        foreign_key_constraint_on: question_id
+    - name: test_attempt
+      using:
+        foreign_key_constraint_on: attempt_id
+- table:
+    name: tests
+    schema: public
+  object_relationships:
+    - name: user
+      using:
+        foreign_key_constraint_on: instructor_id
+  array_relationships:
+    - name: questions
+      using:
+        foreign_key_constraint_on:
+          column: test_id
+          table:
+            name: questions
+            schema: public
+    - name: test_attempts
+      using:
+        foreign_key_constraint_on:
+          column: test_id
+          table:
+            name: test_attempts
+            schema: public
+- table:
+    name: users
+    schema: public
+  array_relationships:
+    - name: documents
+      using:
+        foreign_key_constraint_on:
+          column: uploaded_by
+          table:
+            name: documents
+            schema: public
+    - name: mindmaps
+      using:
+        foreign_key_constraint_on:
+          column: created_by
+          table:
+            name: mindmaps
+            schema: public
+    - name: test_attempts
+      using:
+        foreign_key_constraint_on:
+          column: student_id
+          table:
+            name: test_attempts
+            schema: public
+    - name: tests
+      using:
+        foreign_key_constraint_on:
+          column: instructor_id
+          table:
+            name: tests
+            schema: public===== ./metadata/network.yaml =====
+{}
+===== ./metadata/allow_list.yaml =====
+[]
+===== ./metadata/version.yaml =====
+version: 3
+===== ./metadata/opentelemetry.yaml =====
+{}
+===== ./metadata/metrics_config.yaml =====
+{}
+===== ./metadata/cron_triggers.yaml =====
+[]
+===== ./metadata/actions.yaml =====
+actions: []
+custom_types:
+  enums: []
+  input_objects: []
+  objects: []
+  scalars: []
+===== ./metadata/actions.graphql =====
+===== ./metadata/remote_schemas.yaml =====
+[]
+===== ./metadata/rest_endpoints.yaml =====
+[]
+===== ./config.yaml =====
+version: 3
+endpoint: http://localhost:8080
+metadata_directory: metadata
+
+# This line is crucial for the CLI to authenticate with your Hasura server.
+# The value is taken directly from your docker-compose.yml file.
+admin_secret: 83ab881d73f4a5ff47b6a856a03aea22967efef99e75590cf9cc13f973a54837
+
+actions:
+  kind: synchronous
+  handler_webhook_baseurl: http://localhost:3000===== ./docker-compose.yml =====
+version: '3.8'
+
+services:
+  hasura:
+    image: hasura/graphql-engine:v2.36.1
+    ports:
+      - '8080:8080'
+    depends_on:
+      - postgres
+    restart: always
+    environment:
+      HASURA_GRAPHQL_DATABASE_URL: postgresql://pensiveverse:password@postgres:5432/mindmap_app
+      HASURA_GRAPHQL_ENABLE_CONSOLE: 'true'
+      HASURA_GRAPHQL_DEV_MODE: 'true'
+      HASURA_GRAPHQL_ENABLED_LOG_TYPES: startup, http-log, webhook-log, websocket-log, query-log
+      HASURA_GRAPHQL_ADMIN_SECRET: 83ab881d73f4a5ff47b6a856a03aea22967efef99e75590cf9cc13f973a54837
+      HASURA_GRAPHQL_METADATA_DATABASE_URL: postgresql://pensiveverse:password@postgres:5432/mindmap_app
+      HASURA_GRAPHQL_JWT_SECRET: '{"type":"HS256","key":"ae5a6beae3cf5d737d8110b7eb15700aa6278b4ce65e854c012b2743d93fc973"}'
+      HASURA_GRAPHQL_CORS_DOMAIN: 'http://localhost:3000'
+    volumes:
+      - ./metadata:/hasura-metadata # <--- CORRECTED LINE
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/healthz || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  postgres:
+    image: postgres:15-alpine
+    restart: always
+    environment:
+      POSTGRES_DB: mindmap_app
+      POSTGRES_USER: pensiveverse
+      POSTGRES_PASSWORD: password
+    ports:
+      - '5433:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pensiveverse -d mindmap_app"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:
+===== ./migrations/default/1758710449155_initial_schema_dump/up.sql =====
+SET check_function_bodies = false;
+CREATE TYPE public.document_status AS ENUM (
+    'uploaded',
+    'processing',
+    'completed',
+    'failed'
+);
+CREATE TYPE public.test_status AS ENUM (
+    'DRAFT',
+    'PUBLISHED',
+    'ARCHIVED'
+);
+CREATE TYPE public.user_role AS ENUM (
+    'ADMIN',
+    'INSTRUCTOR',
+    'STUDENT'
+);
+CREATE FUNCTION public.set_current_timestamp_updated_at() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+  _new record;
+BEGIN
+  _new := NEW;
+  _new."updated_at" = NOW();
+  RETURN _new;
+END;
+$$;
+CREATE TABLE public.documents (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    title character varying(255) NOT NULL,
+    file_name character varying(255) NOT NULL,
+    file_path character varying(500) NOT NULL,
+    file_size integer NOT NULL,
+    mime_type character varying(100) NOT NULL,
+    uploaded_by uuid NOT NULL,
+    processed boolean DEFAULT false,
+    status public.document_status DEFAULT 'uploaded'::public.document_status,
+    raw_text text,
+    processed_chunks jsonb,
+    metadata jsonb,
+    entities jsonb,
+    key_phrases jsonb,
+    sections jsonb,
+    word_count integer DEFAULT 0,
+    sentence_count integer DEFAULT 0,
+    processing_time integer,
+    created_at timestamp with time zone DEFAULT now(),
+    updated_at timestamp with time zone DEFAULT now()
+);
+CREATE TABLE public.mindmaps (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    document_id uuid NOT NULL,
+    title character varying(255) NOT NULL,
+    structure jsonb NOT NULL,
+    created_by uuid NOT NULL,
+    is_public boolean DEFAULT false,
+    created_at timestamp with time zone DEFAULT now(),
+    updated_at timestamp with time zone DEFAULT now()
+);
+CREATE TABLE public.question_options (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    question_id uuid NOT NULL,
+    option_text text NOT NULL,
+    is_correct boolean DEFAULT false,
+    order_index integer NOT NULL,
+    created_at timestamp with time zone DEFAULT now()
+);
+CREATE TABLE public.questions (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    test_id uuid NOT NULL,
+    question_text text NOT NULL,
+    question_type character varying(50) NOT NULL,
+    points integer DEFAULT 1,
+    order_index integer NOT NULL,
+    explanation text,
+    created_at timestamp with time zone DEFAULT now(),
+    updated_at timestamp with time zone DEFAULT now()
+);
+CREATE TABLE public.test_attempts (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    test_id uuid NOT NULL,
+    student_id uuid NOT NULL,
+    started_at timestamp with time zone DEFAULT now(),
+    submitted_at timestamp with time zone,
+    time_taken integer,
+    score integer,
+    total_questions integer NOT NULL,
+    correct_answers integer DEFAULT 0,
+    is_completed boolean DEFAULT false,
+    created_at timestamp with time zone DEFAULT now(),
+    updated_at timestamp with time zone DEFAULT now()
+);
+CREATE TABLE public.test_responses (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    attempt_id uuid NOT NULL,
+    question_id uuid NOT NULL,
+    selected_option_ids jsonb NOT NULL,
+    is_correct boolean DEFAULT false,
+    points_earned integer DEFAULT 0,
+    time_spent integer,
+    created_at timestamp with time zone DEFAULT now()
+);
+CREATE TABLE public.tests (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    title character varying(255) NOT NULL,
+    description text,
+    instructor_id uuid NOT NULL,
+    status public.test_status DEFAULT 'DRAFT'::public.test_status,
+    time_limit integer,
+    max_attempts integer DEFAULT 1,
+    passing_score integer,
+    instructions text,
+    is_randomized boolean DEFAULT false,
+    show_results boolean DEFAULT true,
+    allow_review boolean DEFAULT true,
+    start_date timestamp with time zone,
+    end_date timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now(),
+    updated_at timestamp with time zone DEFAULT now()
+);
+CREATE TABLE public.users (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    email character varying(255) NOT NULL,
+    password_hash character varying(255) NOT NULL,
+    first_name character varying(100) NOT NULL,
+    last_name character varying(100) NOT NULL,
+    role public.user_role DEFAULT 'STUDENT'::public.user_role NOT NULL,
+    avatar_url character varying(500),
+    email_verified boolean DEFAULT false,
+    is_active boolean DEFAULT true,
+    created_at timestamp with time zone DEFAULT now(),
+    updated_at timestamp with time zone DEFAULT now(),
+    last_login timestamp with time zone
+);
+ALTER TABLE ONLY public.documents
+    ADD CONSTRAINT documents_pkey PRIMARY KEY (id);
+ALTER TABLE ONLY public.mindmaps
+    ADD CONSTRAINT mindmaps_pkey PRIMARY KEY (id);
+ALTER TABLE ONLY public.question_options
+    ADD CONSTRAINT question_options_pkey PRIMARY KEY (id);
+ALTER TABLE ONLY public.questions
+    ADD CONSTRAINT questions_pkey PRIMARY KEY (id);
+ALTER TABLE ONLY public.test_attempts
+    ADD CONSTRAINT test_attempts_pkey PRIMARY KEY (id);
+ALTER TABLE ONLY public.test_responses
+    ADD CONSTRAINT test_responses_pkey PRIMARY KEY (id);
+ALTER TABLE ONLY public.tests
+    ADD CONSTRAINT tests_pkey PRIMARY KEY (id);
+ALTER TABLE ONLY public.users
+    ADD CONSTRAINT users_email_key UNIQUE (email);
+ALTER TABLE ONLY public.users
+    ADD CONSTRAINT users_pkey PRIMARY KEY (id);
+CREATE TRIGGER set_public_documents_updated_at BEFORE UPDATE ON public.documents FOR EACH ROW EXECUTE FUNCTION public.set_current_timestamp_updated_at();
+CREATE TRIGGER set_public_mindmaps_updated_at BEFORE UPDATE ON public.mindmaps FOR EACH ROW EXECUTE FUNCTION public.set_current_timestamp_updated_at();
+CREATE TRIGGER set_public_questions_updated_at BEFORE UPDATE ON public.questions FOR EACH ROW EXECUTE FUNCTION public.set_current_timestamp_updated_at();
+CREATE TRIGGER set_public_test_attempts_updated_at BEFORE UPDATE ON public.test_attempts FOR EACH ROW EXECUTE FUNCTION public.set_current_timestamp_updated_at();
+CREATE TRIGGER set_public_tests_updated_at BEFORE UPDATE ON public.tests FOR EACH ROW EXECUTE FUNCTION public.set_current_timestamp_updated_at();
+CREATE TRIGGER set_public_users_updated_at BEFORE UPDATE ON public.users FOR EACH ROW EXECUTE FUNCTION public.set_current_timestamp_updated_at();
+ALTER TABLE ONLY public.documents
+    ADD CONSTRAINT documents_uploaded_by_fkey FOREIGN KEY (uploaded_by) REFERENCES public.users(id) ON DELETE CASCADE;
+ALTER TABLE ONLY public.mindmaps
+    ADD CONSTRAINT mindmaps_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id) ON DELETE CASCADE;
+ALTER TABLE ONLY public.mindmaps
+    ADD CONSTRAINT mindmaps_document_id_fkey FOREIGN KEY (document_id) REFERENCES public.documents(id) ON DELETE CASCADE;
+ALTER TABLE ONLY public.question_options
+    ADD CONSTRAINT question_options_question_id_fkey FOREIGN KEY (question_id) REFERENCES public.questions(id) ON DELETE CASCADE;
+ALTER TABLE ONLY public.questions
+    ADD CONSTRAINT questions_test_id_fkey FOREIGN KEY (test_id) REFERENCES public.tests(id) ON DELETE CASCADE;
+ALTER TABLE ONLY public.test_attempts
+    ADD CONSTRAINT test_attempts_student_id_fkey FOREIGN KEY (student_id) REFERENCES public.users(id) ON DELETE CASCADE;
+ALTER TABLE ONLY public.test_attempts
+    ADD CONSTRAINT test_attempts_test_id_fkey FOREIGN KEY (test_id) REFERENCES public.tests(id) ON DELETE CASCADE;
+ALTER TABLE ONLY public.test_responses
+    ADD CONSTRAINT test_responses_attempt_id_fkey FOREIGN KEY (attempt_id) REFERENCES public.test_attempts(id) ON DELETE CASCADE;
+ALTER TABLE ONLY public.test_responses
+    ADD CONSTRAINT test_responses_question_id_fkey FOREIGN KEY (question_id) REFERENCES public.questions(id) ON DELETE CASCADE;
+ALTER TABLE ONLY public.tests
+    ADD CONSTRAINT tests_instructor_id_fkey FOREIGN KEY (instructor_id) REFERENCES public.users(id) ON DELETE CASCADE;

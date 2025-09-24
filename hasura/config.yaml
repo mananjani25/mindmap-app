@@ -1,0 +1,11 @@
+version: 3
+endpoint: http://localhost:8080
+metadata_directory: metadata
+
+# This line is crucial for the CLI to authenticate with your Hasura server.
+# The value is taken directly from your docker-compose.yml file.
+admin_secret: 83ab881d73f4a5ff47b6a856a03aea22967efef99e75590cf9cc13f973a54837
+
+actions:
+  kind: synchronous
+  handler_webhook_baseurl: http://localhost:3000

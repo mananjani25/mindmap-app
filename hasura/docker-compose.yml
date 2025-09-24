@@ -1,0 +1,46 @@
+version: '3.8'
+
+services:
+  hasura:
+    image: hasura/graphql-engine:v2.36.1
+    ports:
+      - '8080:8080'
+    depends_on:
+      - postgres
+    restart: always
+    environment:
+      HASURA_GRAPHQL_DATABASE_URL: postgresql://pensiveverse:password@postgres:5432/mindmap_app
+      HASURA_GRAPHQL_ENABLE_CONSOLE: 'true'
+      HASURA_GRAPHQL_DEV_MODE: 'true'
+      HASURA_GRAPHQL_ENABLED_LOG_TYPES: startup, http-log, webhook-log, websocket-log, query-log
+      HASURA_GRAPHQL_ADMIN_SECRET: 83ab881d73f4a5ff47b6a856a03aea22967efef99e75590cf9cc13f973a54837
+      HASURA_GRAPHQL_METADATA_DATABASE_URL: postgresql://pensiveverse:password@postgres:5432/mindmap_app
+      HASURA_GRAPHQL_JWT_SECRET: '{"type":"HS256","key":"ae5a6beae3cf5d737d8110b7eb15700aa6278b4ce65e854c012b2743d93fc973"}'
+      HASURA_GRAPHQL_CORS_DOMAIN: 'http://localhost:3000'
+    volumes:
+      - ./metadata:/hasura-metadata # <--- CORRECTED LINE
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/healthz || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  postgres:
+    image: postgres:15-alpine
+    restart: always
+    environment:
+      POSTGRES_DB: mindmap_app
+      POSTGRES_USER: pensiveverse
+      POSTGRES_PASSWORD: password
+    ports:
+      - '5433:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pensiveverse -d mindmap_app"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:

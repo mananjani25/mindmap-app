@@ -1,0 +1,136 @@
+- table:
+    name: documents
+    schema: public
+  object_relationships:
+    - name: user
+      using:
+        foreign_key_constraint_on: uploaded_by
+  array_relationships:
+    - name: mindmaps
+      using:
+        foreign_key_constraint_on:
+          column: document_id
+          table:
+            name: mindmaps
+            schema: public
+- table:
+    name: mindmaps
+    schema: public
+  object_relationships:
+    - name: document
+      using:
+        foreign_key_constraint_on: document_id
+    - name: user
+      using:
+        foreign_key_constraint_on: created_by
+- table:
+    name: question_options
+    schema: public
+  object_relationships:
+    - name: question
+      using:
+        foreign_key_constraint_on: question_id
+- table:
+    name: questions
+    schema: public
+  object_relationships:
+    - name: test
+      using:
+        foreign_key_constraint_on: test_id
+  array_relationships:
+    - name: question_options
+      using:
+        foreign_key_constraint_on:
+          column: question_id
+          table:
+            name: question_options
+            schema: public
+    - name: test_responses
+      using:
+        foreign_key_constraint_on:
+          column: question_id
+          table:
+            name: test_responses
+            schema: public
+- table:
+    name: test_attempts
+    schema: public
+  object_relationships:
+    - name: test
+      using:
+        foreign_key_constraint_on: test_id
+    - name: user
+      using:
+        foreign_key_constraint_on: student_id
+  array_relationships:
+    - name: test_responses
+      using:
+        foreign_key_constraint_on:
+          column: attempt_id
+          table:
+            name: test_responses
+            schema: public
+- table:
+    name: test_responses
+    schema: public
+  object_relationships:
+    - name: question
+      using:
+        foreign_key_constraint_on: question_id
+    - name: test_attempt
+      using:
+        foreign_key_constraint_on: attempt_id
+- table:
+    name: tests
+    schema: public
+  object_relationships:
+    - name: user
+      using:
+        foreign_key_constraint_on: instructor_id
+  array_relationships:
+    - name: questions
+      using:
+        foreign_key_constraint_on:
+          column: test_id
+          table:
+            name: questions
+            schema: public
+    - name: test_attempts
+      using:
+        foreign_key_constraint_on:
+          column: test_id
+          table:
+            name: test_attempts
+            schema: public
+- table:
+    name: users
+    schema: public
+  array_relationships:
+    - name: documents
+      using:
+        foreign_key_constraint_on:
+          column: uploaded_by
+          table:
+            name: documents
+            schema: public
+    - name: mindmaps
+      using:
+        foreign_key_constraint_on:
+          column: created_by
+          table:
+            name: mindmaps
+            schema: public
+    - name: test_attempts
+      using:
+        foreign_key_constraint_on:
+          column: student_id
+          table:
+            name: test_attempts
+            schema: public
+    - name: tests
+      using:
+        foreign_key_constraint_on:
+          column: instructor_id
+          table:
+            name: tests
+            schema: public
