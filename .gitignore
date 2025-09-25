@@ -23,4 +23,4 @@ docker-compose.override.yml
 # IDE/OS files
 .idea/
 .vscode/
-*.DS_Store
+*.DS_Storebackend/venv/
