@@ -1,0 +1,3125 @@
+PROJECT CODE EXTRACTION
+=======================
+Generated: 2025-09-26 12:12:56
+Directory: /home/vil/code/mindmap-app/frontend
+=======================
+
+=== PROJECT STRUCTURE ===
+
+.
+├── Dockerfile
+├── README.md
+├── all_code.txt
+├── eslint.config.mjs
+├── extract_code.sh
+├── next-env.d.ts
+├── next.config.ts
+├── package-lock.json
+├── package.json
+├── postcss.config.mjs
+├── public
+│   ├── file.svg
+│   ├── globe.svg
+│   ├── next.svg
+│   ├── vercel.svg
+│   └── window.svg
+├── src
+│   ├── app
+│   │   ├── api
+│   │   │   └── auth
+│   │   │       ├── [...nextauth]
+│   │   │       │   └── route.ts
+│   │   │       └── register
+│   │   │           └── route.ts
+│   │   ├── auth
+│   │   │   ├── signin
+│   │   │   │   └── page.tsx
+│   │   │   └── signup
+│   │   │       └── page.tsx
+│   │   ├── dashboard
+│   │   │   └── page.tsx
+│   │   ├── favicon.ico
+│   │   ├── globals.css
+│   │   ├── layout.tsx
+│   │   ├── middleware.ts
+│   │   └── page.tsx
+│   ├── components
+│   │   ├── auth
+│   │   │   ├── SignInForm.tsx
+│   │   │   └── SignUpForm.tsx
+│   │   ├── dashboard
+│   │   │   └── DashboardContent.tsx
+│   │   ├── layout
+│   │   │   ├── Footer.tsx
+│   │   │   ├── Header.tsx
+│   │   │   ├── MainLayout.tsx
+│   │   │   ├── Providers.tsx
+│   │   │   └── Sidebar.tsx
+│   │   ├── pages
+│   │   │   └── WelcomePage.tsx
+│   │   └── ui
+│   ├── hooks
+│   ├── lib
+│   │   ├── apollo
+│   │   │   ├── client.ts
+│   │   │   └── operations.ts
+│   │   ├── auth
+│   │   │   ├── config.ts
+│   │   │   └── queries.ts
+│   │   ├── utils
+│   │   └── utils.ts
+│   └── types
+│       └── index.ts
+└── tsconfig.json
+
+24 directories, 41 files
+
+=== SOURCE CODE FILES ===
+
+
+=== ./Dockerfile ===
+
+# Use the official Node.js 18 image.
+FROM node:18-alpine
+
+# Set the working directory in the container
+WORKDIR /app
+
+# Copy package.json and package-lock.json (or yarn.lock)
+COPY package*.json ./
+
+# Install dependencies
+RUN npm install
+
+# Copy the rest of the application code
+COPY . .
+
+# Build the Next.js application for production
+RUN npm run build
+
+# Expose port 3000
+EXPOSE 3000
+
+# Command to start the application in production mode
+CMD ["npm", "start"]
+
+
+=== ./README.md ===
+
+This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+
+## Getting Started
+
+First, run the development server:
+
+```bash
+npm run dev
+# or
+yarn dev
+# or
+pnpm dev
+# or
+bun dev
+```
+
+Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+
+You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+
+This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+
+## Learn More
+
+To learn more about Next.js, take a look at the following resources:
+
+- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
+- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+
+You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+
+## Deploy on Vercel
+
+The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+
+Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+
+
+
+=== ./extract_code.sh ===
+
+#!/bin/bash
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+# Configuration
+OUTPUT_FILE="all_code.txt"
+TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
+
+# File extensions to include
+EXTENSIONS=(
+    "*.js" "*.jsx" "*.ts" "*.tsx" 
+    "*.css" "*.scss" "*.sass" "*.less"
+    "*.json" "*.md" "*.html" "*.htm"
+    "*.yml" "*.yaml" "*.toml"
+    "*.py" "*.go" "*.rs" "*.c" "*.cpp" "*.h"
+    "*.java" "*.php" "*.rb" "*.sh"
+    "*.vue" "*.svelte" "*.astro"
+    "*.sql" "*.graphql" "*.gql"
+    "*.env.example" "*.gitignore" "*.dockerignore"
+    "Dockerfile*" "*.dockerfile"
+)
+
+# Directories to exclude
+EXCLUDE_DIRS=(
+    "node_modules" ".next" "build" "dist" ".git" 
+    "coverage" ".nyc_output" ".cache" ".parcel-cache"
+    "target" "vendor" "__pycache__" ".pytest_cache"
+    ".vscode" ".idea" "*.egg-info" ".DS_Store"
+)
+
+# Files to exclude
+EXCLUDE_FILES=(
+    "package-lock.json" "yarn.lock" "pnpm-lock.yaml"
+    "Cargo.lock" "composer.lock" "Pipfile.lock"
+    "*.min.js" "*.min.css" "*.bundle.js" "*.bundle.css"
+    "*.log" "*.tmp" "*.temp" "*.swp" "*.swo"
+)
+
+echo -e "${BLUE}🚀 Code Extraction Tool${NC}"
+echo -e "${YELLOW}Starting extraction at: $TIMESTAMP${NC}"
+echo ""
+
+# Check if tree command exists
+if command -v tree &> /dev/null; then
+    HAS_TREE=true
+    echo -e "${GREEN}✓ tree command found${NC}"
+else
+    HAS_TREE=false
+    echo -e "${YELLOW}⚠ tree command not found, using alternative structure view${NC}"
+fi
+
+# Clear the output file and add header
+cat > "$OUTPUT_FILE" << EOF
+PROJECT CODE EXTRACTION
+=======================
+Generated: $TIMESTAMP
+Directory: $(pwd)
+=======================
+
+EOF
+
+# Add project structure
+echo -e "${BLUE}📁 Generating project structure...${NC}"
+echo "=== PROJECT STRUCTURE ===" >> "$OUTPUT_FILE"
+echo "" >> "$OUTPUT_FILE"
+
+if [ "$HAS_TREE" = true ]; then
+    # Use tree with exclude patterns
+    TREE_IGNORE=$(IFS='|'; echo "${EXCLUDE_DIRS[*]}")
+    tree -I "$TREE_IGNORE" >> "$OUTPUT_FILE" 2>/dev/null
+else
+    # Alternative structure using find
+    echo "Project Structure (using find):" >> "$OUTPUT_FILE"
+    echo "" >> "$OUTPUT_FILE"
+    
+    # Build exclude pattern for find
+    FIND_EXCLUDE=""
+    for dir in "${EXCLUDE_DIRS[@]}"; do
+        FIND_EXCLUDE="$FIND_EXCLUDE -not -path \"./$dir/*\""
+    done
+    
+    eval "find . -type d $FIND_EXCLUDE" | sort | head -50 >> "$OUTPUT_FILE"
+fi
+
+echo "" >> "$OUTPUT_FILE"
+echo "=== SOURCE CODE FILES ===" >> "$OUTPUT_FILE"
+echo "" >> "$OUTPUT_FILE"
+
+# Build find command for file extensions
+EXTENSION_PATTERN=""
+for i in "${!EXTENSIONS[@]}"; do
+    ext="${EXTENSIONS[$i]}"
+    if [ $i -eq 0 ]; then
+        EXTENSION_PATTERN="-name \"$ext\""
+    else
+        EXTENSION_PATTERN="$EXTENSION_PATTERN -o -name \"$ext\""
+    fi
+done
+
+# Build exclude directory pattern
+DIR_EXCLUDE=""
+for dir in "${EXCLUDE_DIRS[@]}"; do
+    DIR_EXCLUDE="$DIR_EXCLUDE -not -path \"./$dir/*\""
+done
+
+# Build exclude file pattern
+FILE_EXCLUDE=""
+for file in "${EXCLUDE_FILES[@]}"; do
+    FILE_EXCLUDE="$FILE_EXCLUDE -not -name \"$file\""
+done
+
+# Find and process files
+echo -e "${BLUE}📝 Extracting source files...${NC}"
+file_count=0
+
+eval "find . -type f \( $EXTENSION_PATTERN \) $DIR_EXCLUDE $FILE_EXCLUDE" | sort | while read -r file; do
+    # Skip if file is too large (>1MB)
+    if [ $(stat -f%z "$file" 2>/dev/null || stat -c%s "$file" 2>/dev/null || echo 0) -gt 1048576 ]; then
+        echo -e "${YELLOW}⚠ Skipping large file: $file${NC}"
+        continue
+    fi
+    
+    echo -e "${GREEN}Processing: $file${NC}"
+    
+    {
+        echo ""
+        echo "=== $file ==="
+        echo ""
+        
+        # Check if file is binary
+        if file "$file" | grep -q "text\|empty"; then
+            cat "$file"
+        else
+            echo "[Binary file - content not displayed]"
+        fi
+        
+        echo ""
+        echo ""
+    } >> "$OUTPUT_FILE"
+    
+    ((file_count++))
+done
+
+# Add summary
+{
+    echo ""
+    echo "=== EXTRACTION SUMMARY ==="
+    echo ""
+    echo "Extraction completed at: $(date '+%Y-%m-%d %H:%M:%S')"
+    echo "Total files processed: $file_count"
+    echo "Output file: $OUTPUT_FILE"
+    echo "Output size: $(du -h "$OUTPUT_FILE" | cut -f1)"
+} >> "$OUTPUT_FILE"
+
+echo ""
+echo -e "${GREEN}✅ Extraction completed!${NC}"
+echo -e "${BLUE}📄 Output file: $OUTPUT_FILE${NC}"
+echo -e "${BLUE}📊 File size: $(du -h "$OUTPUT_FILE" | cut -f1)${NC}"
+
+# Optional: Open file if on macOS/Linux with GUI
+if [[ "$OSTYPE" == "darwin"* ]]; then
+    read -p "Open file in default editor? (y/n): " -n 1 -r
+    echo
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        open "$OUTPUT_FILE"
+    fi
+elif [[ -n "$DISPLAY" ]]; then
+    read -p "Open file in default editor? (y/n): " -n 1 -r
+    echo
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        xdg-open "$OUTPUT_FILE" 2>/dev/null || echo "Could not open file automatically"
+    fi
+fi
+
+
+=== ./next-env.d.ts ===
+
+/// <reference types="next" />
+/// <reference types="next/image-types/global" />
+/// <reference path="./.next/types/routes.d.ts" />
+
+// NOTE: This file should not be edited
+// see https://nextjs.org/docs/app/api-reference/config/typescript for more information.
+
+
+
+=== ./next.config.ts ===
+
+import type { NextConfig } from "next";
+
+const nextConfig: NextConfig = {
+  /* config options here */
+};
+
+export default nextConfig;
+
+
+
+=== ./package.json ===
+
+{
+  "name": "mindmap-frontend",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev --turbopack",
+    "build": "next build --turbopack",
+    "start": "next start",
+    "lint": "eslint"
+  },
+  "dependencies": {
+    "@apollo/client": "^4.0.5",
+    "@apollo/experimental-nextjs-app-support": "^0.13.1",
+    "@auth/hasura-adapter": "^1.10.0",
+    "@headlessui/react": "^2.2.8",
+    "@heroicons/react": "^2.2.0",
+    "@hookform/resolvers": "^5.2.2",
+    "@phosphor-icons/react": "^2.1.10",
+    "bcryptjs": "^3.0.2",
+    "clsx": "^2.1.1",
+    "graphql": "^16.11.0",
+    "jsonwebtoken": "^9.0.2",
+    "lucide-react": "^0.544.0",
+    "next": "15.5.4",
+    "next-auth": "^4.24.11",
+    "react": "19.1.0",
+    "react-dom": "19.1.0",
+    "react-hook-form": "^7.63.0",
+    "tailwind-merge": "^3.3.1",
+    "zod": "^4.1.11"
+  },
+  "devDependencies": {
+    "@eslint/eslintrc": "^3",
+    "@tailwindcss/postcss": "^4",
+    "@types/bcryptjs": "^2.4.6",
+    "@types/jsonwebtoken": "^9.0.10",
+    "@types/node": "^20.19.17",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "@typescript-eslint/eslint-plugin": "^8.44.1",
+    "@typescript-eslint/parser": "^8.44.1",
+    "eslint": "^9",
+    "eslint-config-next": "15.5.4",
+    "eslint-config-prettier": "^10.1.8",
+    "prettier": "^3.6.2",
+    "prettier-plugin-tailwindcss": "^0.6.14",
+    "tailwindcss": "^4",
+    "typescript": "^5"
+  }
+}
+
+
+
+=== ./src/app/api/auth/[...nextauth]/route.ts ===
+
+import NextAuth from "next-auth";
+import { authOptions } from "@/lib/auth/config";
+
+const handler = NextAuth(authOptions);
+
+export { handler as GET, handler as POST };
+
+
+=== ./src/app/api/auth/register/route.ts ===
+
+import { NextResponse } from 'next/server';
+import bcrypt from 'bcryptjs';
+import { print } from 'graphql';
+import { CREATE_USER_ACCOUNT } from '@/lib/auth/queries';
+
+/**
+ * Performs a server-side GraphQL request to Hasura using the admin secret.
+ * This is a secure way to perform privileged operations like user creation.
+ */
+const hasuraAdminRequest = async (query: string, variables: Record<string, any>) => {
+  const response = await fetch(process.env.NEXT_PUBLIC_HASURA_GRAPHQL_ENDPOINT!, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Hasura-Admin-Secret': process.env.HASURA_ADMIN_SECRET!,
+    },
+    body: JSON.stringify({ query, variables }),
+  });
+
+  const result = await response.json();
+
+  if (!response.ok || result.errors) {
+    console.error('Hasura Admin Request Failed:', result.errors);
+    const errorMessage = result.errors?.[0]?.message || 'An unexpected error occurred.';
+    // Check for unique constraint violation for a user-friendly error
+    if (errorMessage.includes('Uniqueness violation')) {
+        return { success: false, message: 'An account with this email already exists.' };
+    }
+    return { success: false, message: errorMessage };
+  }
+
+  return { success: true, data: result.data };
+};
+
+/**
+ * API handler for user registration.
+ */
+export async function POST(request: Request) {
+  try {
+    const { firstName, lastName, email, password, role } = await request.json();
+
+    // --- Server-Side Validation ---
+    if (!firstName || !lastName || !email || !password || !role) {
+      return NextResponse.json({ message: 'All fields are required.' }, { status: 400 });
+    }
+    if (password.length < 8) {
+      return NextResponse.json({ message: 'Password must be at least 8 characters long.' }, { status: 400 });
+    }
+    if (!['STUDENT', 'INSTRUCTOR'].includes(role)) {
+      return NextResponse.json({ message: 'Invalid user role specified.' }, { status: 400 });
+    }
+
+    // --- Secure Password Hashing ---
+    const passwordHash = await bcrypt.hash(password, 10);
+
+    // --- Create User via Hasura Mutation ---
+    const { success, data, message } = await hasuraAdminRequest(print(CREATE_USER_ACCOUNT), {
+      object: {
+        first_name: firstName,
+        last_name: lastName,
+        email: email,
+        password_hash: passwordHash,
+        role: role,
+        is_active: true,
+        email_verified: false, // Set to true if you have an email verification flow
+      },
+    });
+
+    if (!success) {
+      const status = message?.includes('already exists') ? 409 : 500; // 409 Conflict for duplicates
+      return NextResponse.json({ message: message || 'Failed to create user account.' }, { status });
+    }
+
+    // --- Return Success Response ---
+    return NextResponse.json(data.insert_users_one, { status: 201 });
+
+  } catch (error) {
+    console.error('[API_REGISTER_ERROR]', error);
+    return NextResponse.json({ message: 'An internal server error occurred.' }, { status: 500 });
+  }
+}
+
+
+=== ./src/app/auth/signin/page.tsx ===
+
+// src/app/auth/signin/page.tsx
+
+import { SignInForm } from "@/components/auth/SignInForm";
+
+export default function SignInPage() {
+  // No session check needed
+  return (
+    <div className="login-form-container">
+      <div className="form_container">
+        <div className="app-form">
+          <div className="text-center mb-4">
+            <h3 className="mb-1">Sign In</h3>
+            <p>Enter your email & password to login</p>
+          </div>
+          <SignInForm />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
+=== ./src/app/auth/signup/page.tsx ===
+
+// src/app/auth/signup/page.tsx
+
+import { SignUpForm } from "@/components/auth/SignUpForm";
+
+export default function SignUpPage() {
+  return (
+    <div className="login-form-container">
+       <div className="form_container">
+        <div className="app-form">
+          <div className="text-center mb-4">
+            <h3 className="mb-1">Create your Account</h3>
+            <p>Fill out the form to get started.</p>
+          </div>
+          <SignUpForm />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
+=== ./src/app/dashboard/page.tsx ===
+
+// src/app/dashboard/page.tsx
+
+import { MainLayout } from "@/components/layout/MainLayout";
+import { DashboardContent } from "@/components/dashboard/DashboardContent";
+import { UserRole } from "@/types";
+
+// A mock user object to populate the UI while authentication is disabled.
+const mockUser = {
+  id: 'mock-user-123',
+  firstName: 'Laura',
+  lastName: 'Monaldo',
+  email: 'lauradesign@example.com',
+  role: UserRole.ADMIN, // Set to ADMIN to show all sidebar links
+  avatarUrl: '/woman.jpg', // Make sure this image exists in your /public/avtar/ folder
+};
+
+export default function DashboardPage() {
+  // We no longer need to check for a session here.
+  // We pass the mock user directly to the components.
+  return (
+    <MainLayout>
+      <DashboardContent user={mockUser} />
+    </MainLayout>
+  );
+}
+
+
+=== ./src/app/globals.css ===
+
+/* src/app/globals.css */
+
+/* 1. Import Google Fonts (from ra-admin) */
+@import url('https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600;800&display=swap');
+
+/* 2. Import the Tailwind CSS engine */
+@import "tailwindcss";
+
+/* 3. Define the custom theme based on ra-admin variables */
+@theme {
+  /* Core Color Palette */
+  --color-primary: rgb(72 190 206 / <alpha-value>);
+  --color-secondary: rgb(139 132 118 / <alpha-value>);
+  --color-success: rgb(174 204 52 / <alpha-value>);
+  --color-danger: rgb(220 53 69 / <alpha-value>); /* Corrected RGB from ra-admin */
+  --color-warning: rgb(235 195 63 / <alpha-value>);
+  --color-info: rgb(83 90 231 / <alpha-value>);
+  --color-light: rgb(229 227 224 / <alpha-value>);
+  --color-dark: rgb(72 68 61 / <alpha-value>);
+
+  /* Body & Surface Colors */
+  --color-body-bg: #f6f6f6;
+  --color-surface: #ffffff; /* Equivalent to --white in ra-admin */
+  --color-border: #ebedf0;
+
+  /* Font Properties */
+  --font-family-sans: "Golos Text", var(--font-geist-sans), sans-serif;
+  --font-color-base: #15264b;
+  --font-color-title: #1c3264;
+  --font-color-secondary: #22242c;
+  --font-color-light: #a0a0b0;
+
+  /* Sizing and Radius */
+  --font-size-base: 14px;
+  --border-radius-app: 0.8rem;
+  --border-radius-default: 0.5rem;
+  --shadow-default: 0px 0px 21px 3px rgb(139 132 118 / 0.05);
+}
+
+/* 4. Define base layer styles */
+@layer base {
+  body {
+    background-color: var(--color-body-bg);
+    color: var(--font-color-base);
+    font-family: var(--font-family-sans);
+    font-size: var(--font-size-base);
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    color: var(--font-color-title);
+    line-height: 1.4;
+  }
+}
+
+/* --- RA Admin Sidebar Interactivity Styles --- */
+
+/* Base styles for the main layout */
+.app-wrapper {
+  @apply flex;
+}
+.app-content {
+  @apply w-full h-full pt-[45px] pb-[47px] transition-all duration-300 shadow-default overflow-hidden;
+}
+
+/* Styles for the collapsed sidebar state */
+nav.semi-nav {
+  @apply w-[4.5rem];
+}
+
+nav.semi-nav .app-logo .logo {
+  @apply w-[25px] overflow-hidden;
+}
+
+nav.semi-nav .main-nav li a span {
+  @apply text-[0px];
+}
+
+nav.semi-nav .main-nav li a > svg {
+  @apply mx-auto;
+}
+
+nav.semi-nav .main-nav > li > a::after {
+  content: none;
+}
+
+/* Hide the expand button by default */
+.toggle-semi-nav {
+  @apply hidden;
+}
+
+/* Show the expand button ONLY when the semi-nav is hovered */
+nav.semi-nav:hover .toggle-semi-nav {
+  @apply block;
+}
+
+/* Expand the sidebar on hover */
+nav.semi-nav:hover {
+  @apply w-68;
+}
+
+nav.semi-nav:hover .app-logo .logo {
+  @apply w-auto overflow-visible;
+}
+
+nav.semi-nav:hover .main-nav li a span {
+  @apply text-base;
+}
+
+nav.semi-nav:hover .main-nav li a > svg {
+  @apply mx-0;
+}
+
+
+=== ./src/app/layout.tsx ===
+
+import type { Metadata } from "next";
+import { Geist, Geist_Mono } from "next/font/google";
+import { Providers } from "@/components/layout/Providers"; // Import the new provider
+import "./globals.css";
+
+const geistSans = Geist({
+  variable: "--font-geist-sans",
+  subsets: ["latin"],
+});
+
+const geistMono = Geist_Mono({
+  variable: "--font-geist-mono",
+  subsets: ["latin"],
+});
+
+export const metadata: Metadata = {
+  title: "MindMap - AI-Powered Test & Document Management",
+  description: "Professional platform for test creation, document processing, and mind map generation",
+  viewport: "width=device-width, initial-scale=1",
+  robots: "index, follow",
+};
+
+export default function RootLayout({
+  children,
+}: Readonly<{
+  children: React.ReactNode;
+}>) {
+  return (
+    <html lang="en" suppressHydrationWarning>
+      <body
+        className={`${geistSans.variable} ${geistMono.variable} antialiased min-h-screen bg-gray-50`}
+      >
+        {/* Wrap children with the Providers component */}
+        <Providers>
+          {children}
+        </Providers>
+      </body>
+    </html>
+  );
+}
+
+
+=== ./src/app/middleware.ts ===
+
+// src/app/middleware.ts
+
+import { NextResponse } from 'next/server';
+import type { NextRequest } from 'next/server';
+
+// Middleware is disabled for now to allow access to all pages without authentication.
+// It will simply pass the request to the next step.
+export function middleware(request: NextRequest) {
+  return NextResponse.next();
+}
+
+export const config = {
+  matcher: [
+    // This matcher is kept but the middleware function above does nothing with it.
+    '/((?!api|_next/static|_next/image|favicon.ico|public).*)',
+  ],
+};
+
+
+=== ./src/app/page.tsx ===
+
+// src/app/page.tsx
+
+import { redirect } from "next/navigation";
+
+/**
+ * The root page now serves as a permanent redirect to the dashboard,
+ * since authentication is currently disabled for UI development.
+ */
+export default function HomePage() {
+  redirect('/dashboard');
+}
+
+
+=== ./src/components/auth/SignInForm.tsx ===
+
+// src/components/auth/SignInForm.tsx
+
+'use client';
+
+import React from 'react';
+import Link from 'next/link';
+
+export function SignInForm() {
+  // Simplified for UI display since auth is off
+  const handleSubmit = (e: React.FormEvent) => e.preventDefault();
+
+  return (
+    <form onSubmit={handleSubmit} className="mt-8 space-y-6">
+      <div className="space-y-4">
+        <div>
+          <label htmlFor="email" className="block text-sm font-medium text-dark">
+            Email address
+          </label>
+          <input
+            id="email" name="email" type="email"
+            className="mt-1 block w-full rounded-md border-border p-2 focus:border-primary focus:ring-primary/20"
+            placeholder="Enter your email"
+            defaultValue="test@example.com"
+          />
+        </div>
+        <div>
+          <label htmlFor="password" className="block text-sm font-medium text-dark">
+            Password
+          </label>
+          <input
+            id="password" name="password" type="password"
+            className="mt-1 block w-full rounded-md border-border p-2 focus:border-primary focus:ring-primary/20"
+            placeholder="Enter your password"
+            defaultValue="password"
+          />
+        </div>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center">
+            <input id="remember" name="remember" type="checkbox" className="h-4 w-4 rounded border-border text-primary focus:ring-primary/20" />
+            <label htmlFor="remember" className="ml-2 block text-sm text-dark">Remember me</label>
+          </div>
+          <div className="text-sm">
+            <Link href="#" className="font-medium text-primary hover:text-primary/80">Forgot your password?</Link>
+          </div>
+        </div>
+      </div>
+      <div>
+        <button type="submit" className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-primary hover:bg-primary/90">
+          Sign in
+        </button>
+      </div>
+      <div className="text-center">
+        <p className="text-sm text-secondary">
+          Don't have an account?{' '}
+          <Link href="/auth/signup" className="font-medium text-primary hover:text-primary/80">
+            Sign up
+          </Link>
+        </p>
+      </div>
+    </form>
+  );
+}
+
+
+=== ./src/components/auth/SignUpForm.tsx ===
+
+// src/components/auth/SignUpForm.tsx
+
+'use client';
+
+import React from 'react';
+import Link from 'next/link';
+
+export function SignUpForm() {
+  const handleSubmit = (e: React.FormEvent) => e.preventDefault();
+  
+  return (
+    <form onSubmit={handleSubmit} className="mt-8 space-y-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label htmlFor="firstName" className="block text-sm font-medium text-dark">First Name</label>
+          <input id="firstName" name="firstName" type="text" required className="mt-1 block w-full rounded-md border-border p-2"/>
+        </div>
+        <div>
+          <label htmlFor="lastName" className="block text-sm font-medium text-dark">Last Name</label>
+          <input id="lastName" name="lastName" type="text" required className="mt-1 block w-full rounded-md border-border p-2"/>
+        </div>
+        <div className="md:col-span-2">
+          <label htmlFor="email" className="block text-sm font-medium text-dark">Email</label>
+          <input id="email" name="email" type="email" required className="mt-1 block w-full rounded-md border-border p-2"/>
+        </div>
+        <div className="md:col-span-2">
+          <label htmlFor="password" className="block text-sm font-medium text-dark">Password</label>
+          <input id="password" name="password" type="password" required className="mt-1 block w-full rounded-md border-border p-2"/>
+        </div>
+      </div>
+      <div>
+        <button type="submit" className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-primary hover:bg-primary/90">
+          Sign Up
+        </button>
+      </div>
+      <div className="text-center">
+        <p className="text-sm text-secondary">
+          Already have an account?{' '}
+          <Link href="/auth/signin" className="font-medium text-primary hover:text-primary/80">
+            Sign in
+          </Link>
+        </p>
+      </div>
+    </form>
+  );
+}
+
+
+=== ./src/components/dashboard/DashboardContent.tsx ===
+
+// src/components/dashboard/DashboardContent.tsx
+
+'use client';
+
+import React from 'react';
+import type { User } from '@/types';
+import {
+  MapPinLine, ShoppingCart, Pulse, Coins, TrendDown, TrendUp, Basket, Gear, Truck, SealCheck
+} from '@phosphor-icons/react';
+
+// NOTE: You will need to add the placeholder images mentioned in this component
+// to your `public` folder for the UI to look complete.
+// For example: `public/dashboard/ecommerce-dashboard/wristwatch.png`
+
+interface DashboardContentProps {
+  user: Pick<User, 'firstName' | 'lastName' | 'email' | 'role' | 'avatarUrl'>;
+}
+
+export function DashboardContent({ user }: DashboardContentProps) {
+  return (
+    <div className="row">
+      <div className="col-lg-7 col-xxl-6">
+        <div className="row">
+          {/* Stat Cards */}
+          <div className="col-sm-6">
+            <div className="card eshop-cards">
+              <div className="card-body">
+                <div className="flex justify-between items-center">
+                  <span className="bg-primary h-10 w-10 flex items-center justify-center rounded-[15px] text-lg text-white">
+                    <MapPinLine weight="bold" />
+                  </span>
+                  <div className="text-primary text-sm font-medium">Last Month</div>
+                </div>
+                <div className="flex justify-between items-center mt-2">
+                  <div className="flex-shrink-0 self-end">
+                    <p className="text-base mb-0">Visits</p>
+                    <h5>25,220k <span className="text-sm text-danger">-45%</span></h5>
+                  </div>
+                  {/* Placeholder for chart */}
+                  <div className="w-24 h-12 bg-primary/10 rounded-md"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div className="col-sm-6">
+            <div className="card eshop-cards">
+              <div className="card-body">
+                <div className="flex justify-between items-center">
+                  <span className="bg-secondary h-10 w-10 flex items-center justify-center rounded-[15px] text-lg text-white">
+                    <ShoppingCart weight="bold" />
+                  </span>
+                  <div className="text-secondary text-sm font-medium">Weekly</div>
+                </div>
+                <div className="flex justify-between items-center mt-2">
+                  <div className="flex-shrink-0 self-end">
+                    <p className="text-base mb-0">Order</p>
+                    <h5>45,782k <span className="text-sm text-success">+65%</span></h5>
+                  </div>
+                   {/* Placeholder for chart */}
+                   <div className="w-24 h-12 bg-secondary/10 rounded-md"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div className="col-sm-6">
+            <div className="card eshop-cards">
+              <div className="card-body">
+                <div className="flex justify-between items-center">
+                  <span className="bg-success h-10 w-10 flex items-center justify-center rounded-[15px] text-lg text-white">
+                    <Pulse weight="bold" />
+                  </span>
+                  <div className="text-success text-sm font-medium">Today</div>
+                </div>
+                <div className="flex justify-between items-center mt-2">
+                  <div className="flex-shrink-0 self-end">
+                    <p className="text-base mb-0">Activity</p>
+                    <h5>45k</h5>
+                  </div>
+                   {/* Placeholder for chart */}
+                   <div className="w-24 h-12 bg-success/10 rounded-md"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div className="col-sm-6">
+            <div className="card eshop-cards">
+              <div className="card-body">
+                <div className="flex justify-between items-center">
+                  <span className="bg-warning h-10 w-10 flex items-center justify-center rounded-[15px] text-lg text-white">
+                    <Coins weight="fill" />
+                  </span>
+                  <div className="text-warning text-sm font-medium">February</div>
+                </div>
+                <div className="flex justify-between items-center mt-2">
+                  <div className="flex-shrink-0 self-end">
+                    <p className="text-base mb-0">Sales</p>
+                    <h5>$63,987<span className="text-sm text-success">+68%</span></h5>
+                  </div>
+                   {/* Placeholder for chart */}
+                   <div className="w-24 h-12 bg-warning/10 rounded-md"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      {/* Active Users Card */}
+      <div className="col-md-6 col-lg-5 col-xxl-4">
+        <div className="card active-user-card">
+          <div className="card-body">
+            <h5 className="text-dark">Active Users</h5>
+            <div className="flex gap-2 mt-3">
+              <div className="active-user-content">
+                <h2 className="text-primary mb-0">50k</h2>
+                <p className="text-secondary text-nowrap mb-0">Page Views per Minute</p>
+                <div className="app-divider-v dashed py-3"></div>
+                <p className="font-medium">Today's Users</p>
+                {/* Avatar Group Placeholder */}
+                <div className="flex items-center">
+                  <span className="h-9 w-9 -mr-4 flex items-center justify-center rounded-full bg-primary text-white border-2 border-white">
+                    <img src="/avtar/4.png" alt="User" className="rounded-full" />
+                  </span>
+                  <span className="h-9 w-9 -mr-4 flex items-center justify-center rounded-full bg-success text-white border-2 border-white">
+                    <img src="/avtar/5.png" alt="User" className="rounded-full" />
+                  </span>
+                  <span className="h-9 w-9 -mr-4 flex items-center justify-center rounded-full bg-danger text-white border-2 border-white">
+                    <img src="/avtar/6.png" alt="User" className="rounded-full" />
+                  </span>
+                  <span className="h-7 w-7 flex items-center justify-center rounded-full bg-secondary text-white text-xs">10+</span>
+                </div>
+              </div>
+              <div className="card bg-primary flex-grow-1 user-chart-card">
+                <div className="card-body">
+                  {/* Chart Placeholder */}
+                  <div className="h-full w-full bg-primary/20 rounded-md"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
+=== ./src/components/layout/Footer.tsx ===
+
+// src/components/layout/Footer.tsx
+
+'use client';
+
+import React from 'react';
+
+export function Footer() {
+  const currentYear = new Date().getFullYear();
+
+  return (
+    <footer>
+      <div className="container-fluid">
+        <div className="flex flex-col md:flex-row justify-between items-center text-sm">
+          <div className="md:w-9/12 w-full">
+            <ul className="footer-text flex gap-x-4">
+              <li>
+                <p className="mb-0 text-secondary">Copyright © {currentYear} MindMap. All rights reserved 💖</p>
+              </li>
+              <li><a href="#" className="text-secondary hover:text-primary">V1.0.0</a></li>
+            </ul>
+          </div>
+          <div className="md:w-3/12 w-full">
+            <ul className="footer-text text-center md:text-end">
+              <li><a href="#" className="text-secondary hover:text-primary">Need Help?</a></li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </footer>
+  );
+}
+
+
+=== ./src/components/layout/Header.tsx ===
+
+// src/components/layout/Header.tsx
+
+'use client';
+
+import React, { Fragment } from 'react';
+import { Menu, Transition } from '@headlessui/react';
+import { signOut } from 'next-auth/react';
+import {
+  MagnifyingGlassIcon,
+  BellIcon,
+  UserCircleIcon,
+  GearIcon,
+  SignOutIcon,
+  SquaresFourIcon,
+} from '@phosphor-icons/react';
+import type { User } from '@/types';
+import { cn, getInitials } from '@/lib/utils';
+
+// --- YOUR EXISTING PROPS ARE PRESERVED ---
+interface HeaderProps {
+  user?: Pick<User, 'id' | 'email' | 'firstName' | 'lastName' | 'role' | 'avatarUrl'>;
+  onMenuClick: () => void;
+}
+
+export function Header({ user, onMenuClick }: HeaderProps) {
+  // --- YOUR EXISTING LOGIC IS PRESERVED ---
+  const handleSignOut = async () => {
+    await signOut({ callbackUrl: '/auth/signin' });
+  };
+
+  return (
+    <header className="header-main">
+      <div className="container-fluid">
+        <div className="flex h-[80px] items-center justify-between">
+          {/* --- Left section: Mobile menu button --- */}
+          <div className="flex items-center p-0 header-left">
+            <button
+              type="button"
+              className="header-toggle me-3 inline-flex items-center justify-center rounded-lg bg-secondary/10 p-2 text-dark lg:hidden"
+              onClick={onMenuClick}
+            >
+              <span className="sr-only">Open main menu</span>
+              <SquaresFourIcon size={24} />
+            </button>
+          </div>
+
+          {/* --- Right section: Icons and user menu --- */}
+          <div className="flex items-center justify-end p-0 header-right">
+            <ul className="flex items-center gap-x-3">
+              {/* Search Icon */}
+              <li className="header-searchbar">
+                <a href="#" className="block head-icon">
+                  <MagnifyingGlassIcon size={24} className="text-secondary/80 hover:text-primary transition-colors" />
+                </a>
+              </li>
+
+              {/* Notifications Icon */}
+              <li className="header-notification">
+                <a href="#" className="block head-icon relative">
+                  <BellIcon size={24} className="text-secondary/80 hover:text-primary transition-colors" />
+                  <span className="absolute top-0 right-0 p-1 bg-success border border-white rounded-full"></span>
+                </a>
+              </li>
+
+              {/* User Profile Menu */}
+              <li className="header-profile">
+                <Menu as="div" className="relative">
+                  <div>
+                    <Menu.Button className="flex items-center rounded-full text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2">
+                      <span className="sr-only">Open user menu</span>
+                      {user?.avatarUrl ? (
+                        <img
+                          className="h-9 w-9 rounded-lg object-cover"
+                          src={user.avatarUrl}
+                          alt={`${user.firstName} ${user.lastName}`}
+                        />
+                      ) : (
+                        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary text-sm font-medium text-white">
+                          {user ? getInitials(`${user.firstName} ${user.lastName}`) : 'U'}
+                        </div>
+                      )}
+                    </Menu.Button>
+                  </div>
+                  <Transition
+                    as={Fragment}
+                    enter="transition ease-out duration-100"
+                    enterFrom="transform opacity-0 scale-95"
+                    enterTo="transform opacity-100 scale-100"
+                    leave="transition ease-in duration-75"
+                    leaveFrom="transform opacity-100 scale-100"
+                    leaveTo="transform opacity-0 scale-95"
+                  >
+                    <Menu.Items className="absolute right-0 z-10 mt-2 w-56 origin-top-right rounded-lg bg-surface py-1 shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none">
+                      <div className="px-4 py-3 border-b border-border">
+                        <p className="text-sm font-medium text-dark">{user?.firstName} {user?.lastName}</p>
+                        <p className="truncate text-sm text-secondary">{user?.email}</p>
+                      </div>
+                      <Menu.Item>
+                        {({ active }) => (
+                          <a
+                            href="/profile"
+                            className={cn(
+                              active ? 'bg-primary/10' : '',
+                              'flex items-center gap-x-2 px-4 py-2 text-sm text-dark'
+                            )}
+                          >
+                            <UserCircleIcon size={20} /> Your Profile
+                          </a>
+                        )}
+                      </Menu.Item>
+                      <Menu.Item>
+                        {({ active }) => (
+                          <a
+                            href="/settings"
+                            className={cn(
+                              active ? 'bg-primary/10' : '',
+                              'flex items-center gap-x-2 px-4 py-2 text-sm text-dark'
+                            )}
+                          >
+                            <GearIcon size={20} /> Settings
+                          </a>
+                        )}
+                      </Menu.Item>
+                      <div className="py-1">
+                        <Menu.Item>
+                          {({ active }) => (
+                            <button
+                              onClick={handleSignOut}
+                              className={cn(
+                                active ? 'bg-primary/10' : '',
+                                'w-full text-left flex items-center gap-x-2 px-4 py-2 text-sm text-dark'
+                              )}
+                            >
+                              <SignOutIcon size={20} /> Sign out
+                            </button>
+                          )}
+                        </Menu.Item>
+                      </div>
+                    </Menu.Items>
+                  </Transition>
+                </Menu>
+              </li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </header>
+  );
+}
+
+
+
+=== ./src/components/layout/MainLayout.tsx ===
+
+// src/components/layout/MainLayout.tsx
+'use client';
+
+import React, { useState, useEffect } from 'react';
+import { useSession } from 'next-auth/react';
+import { Sidebar } from './Sidebar';
+import { Header } from './Header';
+import { Footer } from './Footer';
+import { cn } from '@/lib/utils';
+
+export function MainLayout({ children }: { children: React.ReactNode }) {
+  const { data: session, status } = useSession();
+  
+  // State for mobile sidebar (drawer)
+  const [isMobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  
+  // State for desktop sidebar (collapsed/expanded)
+  const [isSidebarCollapsed, setSidebarCollapsed] = useState(false);
+
+  // Effect to handle window resize and apply semi-nav automatically
+  useEffect(() => {
+    const handleResize = () => {
+      if (window.innerWidth < 1199 && window.innerWidth > 768) {
+        setSidebarCollapsed(true);
+      } else {
+        setSidebarCollapsed(false);
+      }
+    };
+
+    // Set initial state on component mount
+    handleResize();
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+
+  if (status === 'loading') {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent"></div>
+      </div>
+    );
+  }
+
+  // --- Main Toggle Handler ---
+  // On mobile, it controls the drawer. On desktop, it controls the collapse.
+  const handleMenuToggle = () => {
+    if (window.innerWidth < 992) {
+      setMobileSidebarOpen(!isMobileSidebarOpen);
+    } else {
+      setSidebarCollapsed(!isSidebarCollapsed);
+    }
+  };
+
+  return (
+    // The 'app-wrapper' class is key for the layout
+    <div className="app-wrapper">
+      {isMobileSidebarOpen && (
+        <div
+          className="fixed inset-0 z-40 bg-black bg-opacity-50 lg:hidden"
+          onClick={() => setMobileSidebarOpen(false)}
+        />
+      )}
+
+      <Sidebar
+        isMobileOpen={isMobileSidebarOpen}
+        isCollapsed={isSidebarCollapsed}
+        onClose={() => setMobileSidebarOpen(false)}
+        onExpand={() => setSidebarCollapsed(false)} // Add this to expand from semi-nav hover
+        userRole={session?.user?.role}
+      />
+
+      <div className={cn("app-content flex flex-1 flex-col transition-all duration-300", 
+          isSidebarCollapsed ? "lg:pl-[4.5rem]" : "lg:pl-68"
+      )}>
+        <Header user={session?.user} onMenuClick={handleMenuToggle} />
+
+        <main className="flex-1">
+          <div className="py-6">
+            <div className="container-fluid">
+              {children}
+            </div>
+          </div>
+        </main>
+        
+        <Footer />
+      </div>
+    </div>
+  );
+}
+
+
+=== ./src/components/layout/Providers.tsx ===
+
+'use client';
+
+import React from 'react';
+import { SessionProvider } from 'next-auth/react';
+import { ApolloProvider } from '@apollo/client/react';
+import { apolloClient } from '@/lib/apollo/client';
+
+interface ProvidersProps {
+  children: React.ReactNode;
+}
+
+export function Providers({ children }: ProvidersProps) {
+  return (
+    <SessionProvider>
+      <ApolloProvider client={apolloClient}>
+        {children}
+      </ApolloProvider>
+    </SessionProvider>
+  );
+}
+
+
+=== ./src/components/layout/Sidebar.tsx ===
+
+// src/components/layout/Sidebar.tsx
+
+'use client';
+
+import React from 'react';
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
+import {
+  HomeIcon,
+  DocumentTextIcon,
+  CloudArrowUpIcon,
+  MapIcon,
+  ChartBarIcon,
+  AcademicCapIcon,
+  UsersIcon,
+  CogIcon,
+  XMarkIcon,
+  ChevronDoubleRightIcon,
+} from '@heroicons/react/24/outline';
+import type { UserRole } from '@/types';
+import { cn } from '@/lib/utils';
+
+interface SidebarProps {
+  isMobileOpen: boolean;
+  isCollapsed: boolean;
+  onClose: () => void;
+  onExpand: () => void; // New prop to handle expansion from semi-nav
+  userRole?: UserRole;
+}
+
+// --- YOUR EXISTING NAVIGATION ARRAY IS PRESERVED ---
+interface NavItem {
+  name: string;
+  href: string;
+  icon: React.ComponentType<{ className?: string }>;
+  roles: UserRole[];
+  badge?: string;
+}
+
+const navigation: NavItem[] = [
+  { name: 'Dashboard', href: '/dashboard', icon: HomeIcon, roles: ['ADMIN', 'INSTRUCTOR', 'STUDENT'] },
+  { name: 'Tests', href: '/tests', icon: DocumentTextIcon, roles: ['ADMIN', 'INSTRUCTOR', 'STUDENT'] },
+  { name: 'Documents', href: '/documents', icon: CloudArrowUpIcon, roles: ['ADMIN', 'INSTRUCTOR'] },
+  { name: 'Mind Maps', href: '/mindmaps', icon: MapIcon, roles: ['ADMIN', 'INSTRUCTOR'] },
+  { name: 'Results', href: '/results', icon: ChartBarIcon, roles: ['ADMIN', 'INSTRUCTOR'] },
+  { name: 'Students', href: '/students', icon: AcademicCapIcon, roles: ['ADMIN', 'INSTRUCTOR'] },
+  { name: 'Users', href: '/users', icon: UsersIcon, roles: ['ADMIN'] },
+  { name: 'Settings', href: '/settings', icon: CogIcon, roles: ['ADMIN', 'INSTRUCTOR', 'STUDENT'] },
+];
+
+const NavLinks = ({ userRole, onClose }: { userRole?: UserRole; onClose: () => void }) => {
+  const pathname = usePathname();
+  const filteredNavigation = navigation.filter((item) => (userRole ? item.roles.includes(userRole) : true));
+
+  return (
+    <ul role="list" className="main-nav p-0 mt-2 flex-1 flex flex-col gap-y-1">
+      {filteredNavigation.map((item) => {
+        const isActive = pathname === item.href || (item.href !== '/dashboard' && pathname.startsWith(item.href));
+        return (
+          <li key={item.name} className="px-2">
+            <Link
+              href={item.href}
+              onClick={onClose}
+              className={cn(
+                isActive ? 'bg-primary text-white' : 'text-dark hover:bg-primary/10 hover:text-primary',
+                'group flex items-center gap-x-3 rounded-[var(--border-radius-app)] p-2 text-base font-medium leading-6'
+              )}
+            >
+              <item.icon
+                className={cn(
+                  isActive ? 'text-white' : 'text-secondary group-hover:text-primary',
+                  'h-6 w-6 shrink-0 transition-all duration-300'
+                )}
+                aria-hidden="true"
+              />
+              <span className="flex-1 transition-all duration-300">{item.name}</span>
+            </Link>
+          </li>
+        );
+      })}
+    </ul>
+  );
+};
+
+export function Sidebar({ isMobileOpen, isCollapsed, onClose, onExpand, userRole }: SidebarProps) {
+  return (
+    <>
+      {/* --- Desktop Sidebar --- */}
+      <nav
+        className={cn(
+          'hidden lg:fixed lg:inset-y-0 lg:z-50 lg:flex lg:flex-col',
+          isCollapsed && 'semi-nav' // This class controls the collapsed state
+        )}
+      >
+        <div className="flex grow flex-col gap-y-5 overflow-y-auto bg-surface px-6 pb-4 shadow-default border-r border-border rounded-tr-[25px] rounded-br-[25px]">
+          <div className="app-logo flex h-20 shrink-0 items-center justify-between">
+            <a className="logo inline-block" href="/dashboard">
+              <span className="text-2xl font-bold text-dark">MindMap</span>
+            </a>
+            {/* Expand button */}
+            <span className="toggle-semi-nav bg-light-primary cursor-pointer p-1 rounded-full" onClick={onExpand}>
+              <ChevronDoubleRightIcon className="h-5 w-5 text-dark" />
+            </span>
+          </div>
+          <div className="app-nav flex-1" id="app-simple-bar">
+            <NavLinks userRole={userRole} onClose={() => {}} />
+          </div>
+        </div>
+      </nav>
+
+      {/* --- Mobile Sidebar (Drawer) --- */}
+      <div
+        className={cn(
+          'fixed inset-y-0 left-0 z-50 w-68 transform bg-surface shadow-xl transition-transform duration-300 ease-in-out lg:hidden',
+          isMobileOpen ? 'translate-x-0' : '-translate-x-full'
+        )}
+      >
+        <div className="flex grow flex-col gap-y-5 overflow-y-auto px-6 pb-4">
+          <div className="flex h-20 shrink-0 items-center justify-between">
+            <a className="logo inline-block" href="/dashboard">
+              <span className="text-2xl font-bold text-dark">MindMap</span>
+            </a>
+            <button type="button" className="-m-2.5 p-2.5" onClick={onClose}>
+              <span className="sr-only">Close sidebar</span>
+              <XMarkIcon className="h-6 w-6 text-dark" />
+            </button>
+          </div>
+          <div className="app-nav">
+            <NavLinks userRole={userRole} onClose={onClose} />
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
+
+
+
+=== ./src/components/pages/WelcomePage.tsx ===
+
+/**
+ * Professional landing page for unauthenticated users.
+ */
+'use client';
+
+import React from 'react';
+import Link from 'next/link';
+import { ArrowRightIcon, BeakerIcon, LightBulbIcon, DocumentTextIcon } from '@heroicons/react/24/outline';
+
+export function WelcomePage() {
+  return (
+    <div className="bg-gray-50">
+      <header className="absolute inset-x-0 top-0 z-50">
+        <nav className="flex items-center justify-between p-6 lg:px-8" aria-label="Global">
+          <div className="flex lg:flex-1">
+            <a href="#" className="-m-1.5 p-1.5 flex items-center">
+              <span className="sr-only">MindMap</span>
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-600">
+                  <BeakerIcon className="h-5 w-5 text-white" />
+              </div>
+              <span className="ml-2 text-lg font-semibold text-gray-900">MindMap</span>
+            </a>
+          </div>
+          <div className="flex flex-1 justify-end">
+            <Link 
+              href="/auth/signin" 
+              className="text-sm font-semibold leading-6 text-gray-900 hover:text-blue-700"
+            >
+              Log in <span aria-hidden="true">&rarr;</span>
+            </Link>
+          </div>
+        </nav>
+      </header>
+
+      <main className="relative isolate min-h-screen px-6 pt-14 lg:px-8">
+        <div 
+          className="absolute inset-x-0 -top-40 -z-10 transform-gpu overflow-hidden blur-3xl sm:-top-80" 
+          aria-hidden="true"
+        >
+          <div 
+            className="relative left-[calc(50%-11rem)] aspect-[1155/678] w-[36.125rem] -translate-x-1/2 rotate-[30deg] bg-gradient-to-tr from-[#80d4ff] to-[#3b82f6] opacity-30 sm:left-[calc(50%-30rem)] sm:w-[72.1875rem]" 
+            style={{
+              clipPath: 'polygon(74.1% 44.1%, 100% 61.6%, 97.5% 26.9%, 85.5% 0.1%, 80.7% 2%, 72.5% 32.5%, 60.2% 62.4%, 52.4% 68.1%, 47.5% 58.3%, 45.2% 34.5%, 27.5% 76.7%, 0.1% 64.9%, 17.9% 100%, 27.6% 76.8%, 76.1% 97.7%, 74.1% 44.1%)'
+            }} 
+          />
+        </div>
+        
+        <div className="mx-auto max-w-2xl py-32 sm:py-48 lg:py-56">
+          <div className="text-center">
+            <h1 className="text-4xl font-bold tracking-tight text-gray-900 sm:text-6xl">
+              Unlock Knowledge, Visualize Success
+            </h1>
+            <p className="mt-6 text-lg leading-8 text-gray-600">
+              Our AI-powered platform transforms complex documents into clear, interactive mind maps and generates insightful tests, helping you learn faster and teach better.
+            </p>
+            <div className="mt-10 flex items-center justify-center gap-x-6">
+              <Link
+                href="/auth/signup"
+                className="rounded-md bg-blue-600 px-3.5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-blue-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+              >
+                Get started for free
+              </Link>
+              <a href="#features" className="text-sm font-semibold leading-6 text-gray-900">
+                Learn more <span aria-hidden="true">→</span>
+              </a>
+            </div>
+          </div>
+        </div>
+      </main>
+
+      <section id="features" className="py-24 sm:py-32 bg-white">
+        <div className="mx-auto max-w-7xl px-6 lg:px-8">
+          <div className="mx-auto max-w-2xl lg:text-center">
+            <h2 className="text-base font-semibold leading-7 text-blue-600">World-Class Features</h2>
+            <p className="mt-2 text-3xl font-bold tracking-tight text-gray-900 sm:text-4xl">
+              Everything you need to accelerate learning
+            </p>
+          </div>
+          <div className="mx-auto mt-16 max-w-2xl sm:mt-20 lg:mt-24 lg:max-w-4xl">
+            <dl className="grid max-w-xl grid-cols-1 gap-x-8 gap-y-10 lg:max-w-none lg:grid-cols-2 lg:gap-y-16">
+              <div className="relative pl-16">
+                <dt className="text-base font-semibold leading-7 text-gray-900">
+                  <div className="absolute left-0 top-0 flex h-10 w-10 items-center justify-center rounded-lg bg-blue-600">
+                    <DocumentTextIcon className="h-6 w-6 text-white" aria-hidden="true" />
+                  </div>
+                  Automated Test Generation
+                </dt>
+                <dd className="mt-2 text-base leading-7 text-gray-600">
+                  Upload any document (PDF, DOCX) and our AI will create comprehensive multiple-choice tests in seconds, saving instructors hours of manual work.
+                </dd>
+              </div>
+              <div className="relative pl-16">
+                <dt className="text-base font-semibold leading-7 text-gray-900">
+                  <div className="absolute left-0 top-0 flex h-10 w-10 items-center justify-center rounded-lg bg-blue-600">
+                    <LightBulbIcon className="h-6 w-6 text-white" aria-hidden="true" />
+                  </div>
+                  AI Mind-Map Generation
+                </dt>
+                <dd className="mt-2 text-base leading-7 text-gray-600">
+                  Transform dense text into intuitive, hierarchical mind maps. Visualize key concepts, understand relationships, and grasp complex topics with ease.
+                </dd>
+              </div>
+            </dl>
+          </div>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+
+=== ./src/lib/apollo/client.ts ===
+
+/**
+ * Apollo Client configuration for GraphQL operations with Hasura
+ */
+
+import { ApolloClient, InMemoryCache, createHttpLink, from } from '@apollo/client';
+import { setContext } from '@apollo/client/link/context';
+import { onError } from '@apollo/client/link/error';
+import { getSession } from 'next-auth/react';
+
+// HTTP Link to Hasura GraphQL endpoint
+const httpLink = createHttpLink({
+  uri: process.env.NEXT_PUBLIC_HASURA_GRAPHQL_ENDPOINT || 'http://localhost:8080/v1/graphql',
+  credentials: 'include',
+});
+
+// Auth Link - adds JWT token to requests
+const authLink = setContext(async (_, { headers }) => {
+  try {
+    const session = await getSession();
+    const token = session?.accessToken;
+
+    return {
+      headers: {
+        ...headers,
+        ...(token && {
+          Authorization: `Bearer ${token}`,
+        }),
+        // Add admin secret for development (remove in production)
+        ...(process.env.NODE_ENV === 'development' && {
+          'X-Hasura-Admin-Secret': process.env.NEXT_PUBLIC_HASURA_ADMIN_SECRET,
+        }),
+      },
+    };
+  } catch (error) {
+    console.error('Error getting session:', error);
+    return {
+      headers,
+    };
+  }
+});
+
+// Error Link - handles GraphQL and network errors
+const errorLink = onError(({ graphQLErrors, networkError, operation, forward }) => {
+  if (graphQLErrors) {
+    graphQLErrors.forEach(({ message, locations, path, extensions }) => {
+      console.error(
+        `[GraphQL error]: Message: ${message}, Location: ${locations}, Path: ${path}`,
+        extensions
+      );
+
+      // Handle specific error types
+      if (extensions?.code === 'access-denied') {
+        // Redirect to login or show auth error
+        console.warn('Access denied - user may need to re-authenticate');
+      }
+    });
+  }
+
+  if (networkError) {
+    console.error(`[Network error]: ${networkError}`);
+    
+    // Handle specific network errors
+    if ('statusCode' in networkError) {
+      switch (networkError.statusCode) {
+        case 401:
+          // Unauthorized - redirect to login
+          console.warn('Unauthorized request - redirecting to login');
+          break;
+        case 403:
+          // Forbidden - show permission error
+          console.warn('Forbidden request - insufficient permissions');
+          break;
+        case 500:
+          // Server error
+          console.error('Server error occurred');
+          break;
+      }
+    }
+  }
+});
+
+// Cache configuration
+const cache = new InMemoryCache({
+  typePolicies: {
+    Query: {
+      fields: {
+        tests: {
+          keyArgs: ['where', 'order_by'],
+          merge(existing = [], incoming) {
+            return incoming;
+          },
+        },
+        test_attempts: {
+          keyArgs: ['where', 'order_by'],
+          merge(existing = [], incoming) {
+            return incoming;
+          },
+        },
+        users: {
+          keyArgs: ['where', 'order_by'],
+          merge(existing = [], incoming) {
+            return incoming;
+          },
+        },
+        documents: {
+          keyArgs: ['where', 'order_by'],
+          merge(existing = [], incoming) {
+            return incoming;
+          },
+        },
+      },
+    },
+    User: {
+      keyFields: ['id'],
+    },
+    Test: {
+      keyFields: ['id'],
+    },
+    Question: {
+      keyFields: ['id'],
+    },
+    TestAttempt: {
+      keyFields: ['id'],
+    },
+    Document: {
+      keyFields: ['id'],
+    },
+    MindMap: {
+      keyFields: ['id'],
+    },
+  },
+});
+
+// Create Apollo Client instance
+export const apolloClient = new ApolloClient({
+  link: from([errorLink, authLink, httpLink]),
+  cache,
+  defaultOptions: {
+    watchQuery: {
+      errorPolicy: 'all',
+      notifyOnNetworkStatusChange: true,
+    },
+    query: {
+      errorPolicy: 'all',
+      notifyOnNetworkStatusChange: true,
+    },
+    mutate: {
+      errorPolicy: 'all',
+    },
+  },
+  connectToDevTools: process.env.NODE_ENV === 'development',
+});
+
+// Helper function to clear cache
+export const clearApolloCache = () => {
+  apolloClient.cache.reset();
+};
+
+// Helper function to refetch queries
+export const refetchQueries = (queries: string[]) => {
+  return apolloClient.refetchQueries({
+    include: queries,
+  });
+};
+
+export default apolloClient;
+
+
+=== ./src/lib/apollo/operations.ts ===
+
+/**
+ * GraphQL queries, mutations, and subscriptions
+ */
+
+import { gql } from '@apollo/client';
+
+// Fragment definitions for reusable field sets
+export const USER_FRAGMENT = gql`
+  fragment UserFields on users {
+    id
+    email
+    first_name
+    last_name
+    role
+    avatar_url
+    email_verified
+    is_active
+    created_at
+    updated_at
+    last_login
+  }
+`;
+
+export const TEST_FRAGMENT = gql`
+  fragment TestFields on tests {
+    id
+    title
+    description
+    instructor_id
+    status
+    time_limit
+    max_attempts
+    passing_score
+    instructions
+    is_randomized
+    show_results
+    allow_review
+    start_date
+    end_date
+    created_at
+    updated_at
+  }
+`;
+
+export const QUESTION_FRAGMENT = gql`
+  fragment QuestionFields on questions {
+    id
+    test_id
+    question_text
+    question_type
+    points
+    order_index
+    explanation
+    created_at
+    updated_at
+  }
+`;
+
+export const QUESTION_OPTION_FRAGMENT = gql`
+  fragment QuestionOptionFields on question_options {
+    id
+    question_id
+    option_text
+    is_correct
+    order_index
+    created_at
+  }
+`;
+
+export const TEST_ATTEMPT_FRAGMENT = gql`
+  fragment TestAttemptFields on test_attempts {
+    id
+    test_id
+    student_id
+    started_at
+    submitted_at
+    time_taken
+    score
+    total_questions
+    correct_answers
+    is_completed
+    created_at
+    updated_at
+  }
+`;
+
+export const DOCUMENT_FRAGMENT = gql`
+  fragment DocumentFields on documents {
+    id
+    title
+    file_name
+    file_path
+    file_size
+    mime_type
+    uploaded_by
+    processed
+    raw_text
+    processed_chunks
+    created_at
+    updated_at
+  }
+`;
+
+// User Queries
+export const GET_CURRENT_USER = gql`
+  ${USER_FRAGMENT}
+  query GetCurrentUser {
+    users(limit: 1) {
+      ...UserFields
+    }
+  }
+`;
+
+export const GET_USERS = gql`
+  ${USER_FRAGMENT}
+  query GetUsers(
+    $where: users_bool_exp
+    $order_by: [users_order_by!]
+    $limit: Int
+    $offset: Int
+  ) {
+    users(where: $where, order_by: $order_by, limit: $limit, offset: $offset) {
+      ...UserFields
+    }
+    users_aggregate(where: $where) {
+      aggregate {
+        count
+      }
+    }
+  }
+`;
+
+export const GET_USER_BY_ID = gql`
+  ${USER_FRAGMENT}
+  query GetUserById($id: uuid!) {
+    users_by_pk(id: $id) {
+      ...UserFields
+    }
+  }
+`;
+
+// Test Queries
+export const GET_TESTS = gql`
+  ${TEST_FRAGMENT}
+  ${USER_FRAGMENT}
+  query GetTests(
+    $where: tests_bool_exp
+    $order_by: [tests_order_by!]
+    $limit: Int
+    $offset: Int
+  ) {
+    tests(where: $where, order_by: $order_by, limit: $limit, offset: $offset) {
+      ...TestFields
+      instructor {
+        ...UserFields
+      }
+      questions_aggregate {
+        aggregate {
+          count
+        }
+      }
+    }
+    tests_aggregate(where: $where) {
+      aggregate {
+        count
+      }
+    }
+  }
+`;
+
+export const GET_TEST_BY_ID = gql`
+  ${TEST_FRAGMENT}
+  ${USER_FRAGMENT}
+  ${QUESTION_FRAGMENT}
+  ${QUESTION_OPTION_FRAGMENT}
+  query GetTestById($id: uuid!) {
+    tests_by_pk(id: $id) {
+      ...TestFields
+      instructor {
+        ...UserFields
+      }
+      questions(order_by: { order_index: asc }) {
+        ...QuestionFields
+        options: question_options(order_by: { order_index: asc }) {
+          ...QuestionOptionFields
+        }
+      }
+    }
+  }
+`;
+
+export const GET_INSTRUCTOR_TESTS = gql`
+  ${TEST_FRAGMENT}
+  query GetInstructorTests($instructor_id: uuid!) {
+    tests(
+      where: { instructor_id: { _eq: $instructor_id } }
+      order_by: { created_at: desc }
+    ) {
+      ...TestFields
+      questions_aggregate {
+        aggregate {
+          count
+        }
+      }
+      test_attempts_aggregate {
+        aggregate {
+          count
+        }
+      }
+    }
+  }
+`;
+
+// Question Queries
+export const GET_TEST_QUESTIONS = gql`
+  ${QUESTION_FRAGMENT}
+  ${QUESTION_OPTION_FRAGMENT}
+  query GetTestQuestions($test_id: uuid!) {
+    questions(
+      where: { test_id: { _eq: $test_id } }
+      order_by: { order_index: asc }
+    ) {
+      ...QuestionFields
+      options: question_options(order_by: { order_index: asc }) {
+        ...QuestionOptionFields
+      }
+    }
+  }
+`;
+
+// Test Attempt Queries
+export const GET_TEST_ATTEMPTS = gql`
+  ${TEST_ATTEMPT_FRAGMENT}
+  ${USER_FRAGMENT}
+  ${TEST_FRAGMENT}
+  query GetTestAttempts(
+    $where: test_attempts_bool_exp
+    $order_by: [test_attempts_order_by!]
+    $limit: Int
+    $offset: Int
+  ) {
+    test_attempts(
+      where: $where
+      order_by: $order_by
+      limit: $limit
+      offset: $offset
+    ) {
+      ...TestAttemptFields
+      student {
+        ...UserFields
+      }
+      test {
+        ...TestFields
+      }
+    }
+    test_attempts_aggregate(where: $where) {
+      aggregate {
+        count
+      }
+    }
+  }
+`;
+
+export const GET_STUDENT_ATTEMPTS = gql`
+  ${TEST_ATTEMPT_FRAGMENT}
+  ${TEST_FRAGMENT}
+  query GetStudentAttempts($student_id: uuid!) {
+    test_attempts(
+      where: { student_id: { _eq: $student_id } }
+      order_by: { created_at: desc }
+    ) {
+      ...TestAttemptFields
+      test {
+        ...TestFields
+      }
+    }
+  }
+`;
+
+// Document Queries
+export const GET_DOCUMENTS = gql`
+  ${DOCUMENT_FRAGMENT}
+  ${USER_FRAGMENT}
+  query GetDocuments(
+    $where: documents_bool_exp
+    $order_by: [documents_order_by!]
+    $limit: Int
+    $offset: Int
+  ) {
+    documents(
+      where: $where
+      order_by: $order_by
+      limit: $limit
+      offset: $offset
+    ) {
+      ...DocumentFields
+      uploaded_by_user: user {
+        ...UserFields
+      }
+    }
+    documents_aggregate(where: $where) {
+      aggregate {
+        count
+      }
+    }
+  }
+`;
+
+export const GET_DOCUMENT_BY_ID = gql`
+  ${DOCUMENT_FRAGMENT}
+  ${USER_FRAGMENT}
+  query GetDocumentById($id: uuid!) {
+    documents_by_pk(id: $id) {
+      ...DocumentFields
+      uploaded_by_user: user {
+        ...UserFields
+      }
+    }
+  }
+`;
+
+// User Mutations
+export const CREATE_USER = gql`
+  ${USER_FRAGMENT}
+  mutation CreateUser($object: users_insert_input!) {
+    insert_users_one(object: $object) {
+      ...UserFields
+    }
+  }
+`;
+
+export const UPDATE_USER = gql`
+  ${USER_FRAGMENT}
+  mutation UpdateUser($id: uuid!, $_set: users_set_input!) {
+    update_users_by_pk(pk_columns: { id: $id }, _set: $_set) {
+      ...UserFields
+    }
+  }
+`;
+
+export const DELETE_USER = gql`
+  mutation DeleteUser($id: uuid!) {
+    delete_users_by_pk(id: $id) {
+      id
+    }
+  }
+`;
+
+// Test Mutations
+export const CREATE_TEST = gql`
+  ${TEST_FRAGMENT}
+  mutation CreateTest($object: tests_insert_input!) {
+    insert_tests_one(object: $object) {
+      ...TestFields
+    }
+  }
+`;
+
+export const UPDATE_TEST = gql`
+  ${TEST_FRAGMENT}
+  mutation UpdateTest($id: uuid!, $_set: tests_set_input!) {
+    update_tests_by_pk(pk_columns: { id: $id }, _set: $_set) {
+      ...TestFields
+    }
+  }
+`;
+
+export const DELETE_TEST = gql`
+  mutation DeleteTest($id: uuid!) {
+    delete_tests_by_pk(id: $id) {
+      id
+    }
+  }
+`;
+
+export const PUBLISH_TEST = gql`
+  ${TEST_FRAGMENT}
+  mutation PublishTest($id: uuid!) {
+    update_tests_by_pk(
+      pk_columns: { id: $id }
+      _set: { status: PUBLISHED }
+    ) {
+      ...TestFields
+    }
+  }
+`;
+
+// Question Mutations
+export const CREATE_QUESTION = gql`
+  ${QUESTION_FRAGMENT}
+  mutation CreateQuestion($object: questions_insert_input!) {
+    insert_questions_one(object: $object) {
+      ...QuestionFields
+    }
+  }
+`;
+
+export const CREATE_QUESTIONS_BATCH = gql`
+  ${QUESTION_FRAGMENT}
+  mutation CreateQuestionsBatch($objects: [questions_insert_input!]!) {
+    insert_questions(objects: $objects) {
+      returning {
+        ...QuestionFields
+      }
+    }
+  }
+`;
+
+export const UPDATE_QUESTION = gql`
+  ${QUESTION_FRAGMENT}
+  mutation UpdateQuestion($id: uuid!, $_set: questions_set_input!) {
+    update_questions_by_pk(pk_columns: { id: $id }, _set: $_set) {
+      ...QuestionFields
+    }
+  }
+`;
+
+export const DELETE_QUESTION = gql`
+  mutation DeleteQuestion($id: uuid!) {
+    delete_questions_by_pk(id: $id) {
+      id
+    }
+  }
+`;
+
+// Question Option Mutations
+export const CREATE_QUESTION_OPTIONS = gql`
+  ${QUESTION_OPTION_FRAGMENT}
+  mutation CreateQuestionOptions($objects: [question_options_insert_input!]!) {
+    insert_question_options(objects: $objects) {
+      returning {
+        ...QuestionOptionFields
+      }
+    }
+  }
+`;
+
+// Test Attempt Mutations
+export const START_TEST_ATTEMPT = gql`
+  ${TEST_ATTEMPT_FRAGMENT}
+  mutation StartTestAttempt($object: test_attempts_insert_input!) {
+    insert_test_attempts_one(object: $object) {
+      ...TestAttemptFields
+    }
+  }
+`;
+
+export const SUBMIT_TEST_ATTEMPT = gql`
+  ${TEST_ATTEMPT_FRAGMENT}
+  mutation SubmitTestAttempt(
+    $id: uuid!
+    $responses: [test_responses_insert_input!]!
+    $_set: test_attempts_set_input!
+  ) {
+    insert_test_responses(objects: $responses) {
+      affected_rows
+    }
+    update_test_attempts_by_pk(pk_columns: { id: $id }, _set: $_set) {
+      ...TestAttemptFields
+    }
+  }
+`;
+
+// Document Mutations
+export const CREATE_DOCUMENT = gql`
+  ${DOCUMENT_FRAGMENT}
+  mutation CreateDocument($object: documents_insert_input!) {
+    insert_documents_one(object: $object) {
+      ...DocumentFields
+    }
+  }
+`;
+
+export const UPDATE_DOCUMENT = gql`
+  ${DOCUMENT_FRAGMENT}
+  mutation UpdateDocument($id: uuid!, $_set: documents_set_input!) {
+    update_documents_by_pk(pk_columns: { id: $id }, _set: $_set) {
+      ...DocumentFields
+    }
+  }
+`;
+
+export const DELETE_DOCUMENT = gql`
+  mutation DeleteDocument($id: uuid!) {
+    delete_documents_by_pk(id: $id) {
+      id
+    }
+  }
+`;
+
+
+=== ./src/lib/auth/config.ts ===
+
+/**
+ * NextAuth configuration for authentication with Hasura integration
+ */
+
+import { NextAuthOptions } from 'next-auth';
+import CredentialsProvider from 'next-auth/providers/credentials';
+import { JWT } from 'next-auth/jwt';
+import bcrypt from 'bcryptjs';
+import jwt from 'jsonwebtoken'; // Use ES6 import for consistency
+import { print } from 'graphql'; // Use print to safely convert GraphQL AST to string
+import { GET_USER_BY_EMAIL, UPDATE_USER_LAST_LOGIN } from './queries';
+import { User as AppUser } from '@/types';
+
+// Type declarations remain the same...
+declare module 'next-auth' {
+  interface User extends AppUser {}
+
+  interface Session {
+    user: {
+      id: string;
+      email: string;
+      firstName: string;
+      lastName: string;
+      role: string;
+      avatarUrl?: string;
+    };
+    accessToken: string;
+  }
+}
+
+declare module 'next-auth/jwt' {
+  interface JWT {
+    id: string;
+    role: string;
+    firstName: string;
+    lastName: string;
+    avatarUrl?: string;
+    accessToken: string;
+  }
+}
+
+
+/**
+ * Helper function to perform server-side GraphQL requests to Hasura using the admin secret.
+ * This is used during the authorization flow, which happens server-side.
+ */
+const hasuraServerRequest = async (query: string, variables: Record<string, any>) => {
+  const response = await fetch(process.env.NEXT_PUBLIC_HASURA_GRAPHQL_ENDPOINT!, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Hasura-Admin-Secret': process.env.HASURA_ADMIN_SECRET!,
+    },
+    body: JSON.stringify({ query, variables }),
+  });
+
+  if (!response.ok) {
+    console.error('Hasura request failed:', response.statusText);
+    throw new Error('Failed to connect to authentication service.');
+  }
+
+  const result = await response.json();
+  if (result.errors) {
+    console.error('Hasura GraphQL errors:', result.errors);
+    throw new Error(result.errors[0].message || 'An error occurred during authentication.');
+  }
+
+  return result.data;
+};
+
+export const authOptions: NextAuthOptions = {
+  providers: [
+    CredentialsProvider({
+      id: 'credentials',
+      name: 'credentials',
+      credentials: {
+        email: { label: 'Email', type: 'email' },
+        password: { label: 'Password', type: 'password' },
+      },
+      async authorize(credentials) {
+        if (!credentials?.email || !credentials?.password) {
+          throw new Error('Email and password are required');
+        }
+
+        try {
+          // Use the server-side helper to query Hasura with the printed GraphQL query
+          const data = await hasuraServerRequest(print(GET_USER_BY_EMAIL), {
+            email: credentials.email,
+          });
+
+          const user = data?.users?.[0];
+
+          if (!user) {
+            throw new Error('No user found with this email.');
+          }
+
+          if (!user.is_active) {
+            throw new Error('This account has been deactivated.');
+          }
+
+          const isPasswordValid = await bcrypt.compare(
+            credentials.password,
+            user.password_hash
+          );
+
+          if (!isPasswordValid) {
+            throw new Error('The password you entered is incorrect.');
+          }
+
+          // Update last login (fire-and-forget is acceptable here)
+          hasuraServerRequest(print(UPDATE_USER_LAST_LOGIN), {
+            id: user.id,
+            last_login: new Date().toISOString(),
+          }).catch(err => console.error("Failed to update last login:", err));
+
+          return {
+            id: user.id,
+            email: user.email,
+            firstName: user.first_name,
+            lastName: user.last_name,
+            role: user.role,
+            avatarUrl: user.avatar_url,
+            emailVerified: user.email_verified,
+            isActive: user.is_active,
+            createdAt: user.created_at,
+            updatedAt: user.updated_at,
+          };
+        } catch (error) {
+          console.error('Authentication error:', error);
+          // Re-throw the error message to be displayed on the sign-in form
+          throw new Error(error instanceof Error ? error.message : 'An unknown error occurred.');
+        }
+      },
+    }),
+  ],
+
+  session: {
+    strategy: 'jwt',
+    maxAge: 8 * 24 * 60 * 60, // 8 days
+  },
+
+  jwt: {
+    maxAge: 8 * 24 * 60 * 60, // 8 days
+  },
+
+  pages: {
+    signIn: '/auth/signin',
+    error: '/auth/signin', // Redirect to signin page on error, displaying the error
+  },
+
+  callbacks: {
+    async jwt({ token, user }) {
+      if (user) {
+        token.id = user.id;
+        token.role = user.role;
+        token.firstName = user.firstName;
+        token.lastName = user.lastName;
+        token.avatarUrl = user.avatarUrl;
+        
+        token.accessToken = generateHasuraJWT({
+          userId: user.id,
+          role: user.role,
+        });
+      }
+      return token;
+    },
+
+    async session({ session, token }) {
+      if (token) {
+        session.user.id = token.id;
+        session.user.role = token.role;
+        session.user.firstName = token.firstName;
+        session.user.lastName = token.lastName;
+        session.user.avatarUrl = token.avatarUrl;
+        session.accessToken = token.accessToken;
+      }
+      return session;
+    },
+  },
+
+  debug: process.env.NODE_ENV === 'development',
+};
+
+/**
+ * Generates a Hasura-compatible JWT.
+ * Best Practice: Use a dedicated, strong secret for Hasura JWTs,
+ * stored in an environment variable like HASURA_JWT_SECRET.
+ */
+function generateHasuraJWT(payload: { userId: string; role: string }) {
+  const secret = process.env.HASURA_JWT_SECRET || process.env.NEXTAUTH_SECRET!;
+  if (!secret) {
+      throw new Error('JWT secret is not configured. Please set HASURA_JWT_SECRET or NEXTAUTH_SECRET.');
+  }
+
+  const hasuraPayload = {
+    'sub': payload.userId,
+    'iat': Math.floor(Date.now() / 1000),
+    'exp': Math.floor(Date.now() / 1000) + (8 * 24 * 60 * 60), // 8 days
+    'https://hasura.io/jwt/claims': {
+      'x-hasura-allowed-roles': [payload.role, 'STUDENT', 'INSTRUCTOR'], // List all possible roles
+      'x-hasura-default-role': payload.role,
+      'x-hasura-user-id': payload.userId,
+    },
+  };
+
+  return jwt.sign(hasuraPayload, secret, { algorithm: 'HS256' });
+}
+
+
+=== ./src/lib/auth/queries.ts ===
+
+/**
+ * GraphQL queries for authentication
+ */
+
+import { gql } from '@apollo/client';
+
+export const GET_USER_BY_EMAIL = gql`
+  query GetUserByEmail($email: String!) {
+    users(where: { email: { _eq: $email } }, limit: 1) {
+      id
+      email
+      password_hash
+      first_name
+      last_name
+      role
+      avatar_url
+      email_verified
+      is_active
+      created_at
+      updated_at
+      last_login
+    }
+  }
+`;
+
+export const UPDATE_USER_LAST_LOGIN = gql`
+  mutation UpdateUserLastLogin($id: uuid!, $last_login: timestamptz!) {
+    update_users_by_pk(
+      pk_columns: { id: $id }
+      _set: { last_login: $last_login }
+    ) {
+      id
+      last_login
+    }
+  }
+`;
+
+export const CREATE_USER_ACCOUNT = gql`
+  mutation CreateUserAccount($object: users_insert_input!) {
+    insert_users_one(object: $object) {
+      id
+      email
+      first_name
+      last_name
+      role
+      avatar_url
+      email_verified
+      is_active
+      created_at
+    }
+  }
+`;
+
+export const CHECK_EMAIL_EXISTS = gql`
+  query CheckEmailExists($email: String!) {
+    users(where: { email: { _eq: $email } }, limit: 1) {
+      id
+      email
+    }
+  }
+`;
+
+
+=== ./src/lib/utils.ts ===
+
+import { type ClassValue, clsx } from 'clsx';
+import { twMerge } from 'tailwind-merge';
+
+/**
+ * Utility function to merge Tailwind CSS classes
+ */
+export function cn(...inputs: ClassValue[]) {
+  return twMerge(clsx(inputs));
+}
+
+/**
+ * Format bytes to human readable format
+ */
+export function formatBytes(bytes: number, decimals = 2): string {
+  if (bytes === 0) return '0 Bytes';
+
+  const k = 1024;
+  const dm = decimals < 0 ? 0 : decimals;
+  const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB'];
+
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+}
+
+/**
+ * Format date to readable string
+ */
+export function formatDate(date: Date | string): string {
+  const d = typeof date === 'string' ? new Date(date) : date;
+  return d.toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+/**
+ * Debounce function
+ */
+export function debounce<T extends (...args: any[]) => any>(
+  func: T,
+  wait: number
+): (...args: Parameters<T>) => void {
+  let timeout: NodeJS.Timeout;
+  
+  return (...args: Parameters<T>) => {
+    clearTimeout(timeout);
+    timeout = setTimeout(() => func(...args), wait);
+  };
+}
+
+/**
+ * Generate random ID
+ */
+export function generateId(): string {
+  return Math.random().toString(36).substring(2) + Date.now().toString(36);
+}
+
+/**
+ * Validate email format
+ */
+export function isValidEmail(email: string): boolean {
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return emailRegex.test(email);
+}
+
+/**
+ * Capitalize first letter of string
+ */
+export function capitalize(str: string): string {
+  return str.charAt(0).toUpperCase() + str.slice(1).toLowerCase();
+}
+
+/**
+ * Truncate text with ellipsis
+ */
+export function truncate(text: string, maxLength: number): string {
+  if (text.length <= maxLength) return text;
+  return text.substring(0, maxLength) + '...';
+}
+
+/**
+ * Sleep utility for async operations
+ */
+export function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Format percentage
+ */
+export function formatPercentage(value: number, decimals = 1): string {
+  return `${value.toFixed(decimals)}%`;
+}
+
+/**
+ * Get file extension from filename
+ */
+export function getFileExtension(filename: string): string {
+  return filename.slice(((filename.lastIndexOf('.') - 1) >>> 0) + 2);
+}
+
+/**
+ * Check if file type is supported for document upload
+ */
+export function isSupportedFileType(filename: string): boolean {
+  const supportedExtensions = ['pdf', 'docx', 'txt', 'pptx'];
+  const extension = getFileExtension(filename).toLowerCase();
+  return supportedExtensions.includes(extension);
+}
+
+/**
+ * Safe JSON parse with fallback
+ */
+export function safeJsonParse<T>(json: string, fallback: T): T {
+  try {
+    return JSON.parse(json) as T;
+  } catch {
+    return fallback;
+  }
+}
+
+/**
+ * Create URL-safe slug from text
+ */
+export function slugify(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/[^\w ]+/g, '')
+    .replace(/ +/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
+/**
+ * Convert camelCase to Title Case
+ */
+export function camelToTitle(camelCase: string): string {
+  return camelCase
+    .replace(/([A-Z])/g, ' $1')
+    .replace(/^./, (str) => str.toUpperCase())
+    .trim();
+}
+
+/**
+ * Get initials from full name
+ */
+export function getInitials(name: string): string {
+  return name
+    .split(' ')
+    .map((part) => part[0])
+    .join('')
+    .toUpperCase()
+    .substring(0, 2);
+}
+
+/**
+ * Format duration in seconds to human readable format
+ */
+export function formatDuration(seconds: number): string {
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  const remainingSeconds = seconds % 60;
+
+  if (hours > 0) {
+    return `${hours}h ${minutes}m`;
+  } else if (minutes > 0) {
+    return `${minutes}m ${remainingSeconds}s`;
+  } else {
+    return `${remainingSeconds}s`;
+  }
+}
+
+
+=== ./src/types/index.ts ===
+
+/**
+ * Core application types and interfaces
+ */
+
+// User types
+export enum UserRole {
+    ADMIN = 'ADMIN',
+    INSTRUCTOR = 'INSTRUCTOR',
+    STUDENT = 'STUDENT',
+  }
+export interface User {
+  id: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+  role: UserRole;
+  avatarUrl?: string;
+  emailVerified: boolean;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+  lastLogin?: string;
+}
+
+export interface AuthUser extends User {
+  accessToken: string;
+  refreshToken?: string;
+}
+
+// Test types
+export type TestStatus = 'DRAFT' | 'PUBLISHED' | 'ARCHIVED';
+export type QuestionType = 'MCQ' | 'MULTIPLE_SELECT' | 'TRUE_FALSE';
+
+export interface Test {
+  id: string;
+  title: string;
+  description?: string;
+  instructorId: string;
+  instructor?: User;
+  status: TestStatus;
+  timeLimit?: number; // in minutes
+  maxAttempts: number;
+  passingScore?: number; // percentage
+  instructions?: string;
+  isRandomized: boolean;
+  showResults: boolean;
+  allowReview: boolean;
+  startDate?: string;
+  endDate?: string;
+  createdAt: string;
+  updatedAt: string;
+  questions?: Question[];
+  questionsCount?: number;
+}
+
+export interface Question {
+  id: string;
+  testId: string;
+  questionText: string;
+  questionType: QuestionType;
+  points: number;
+  orderIndex: number;
+  explanation?: string;
+  createdAt: string;
+  updatedAt: string;
+  options: QuestionOption[];
+}
+
+export interface QuestionOption {
+  id: string;
+  questionId: string;
+  optionText: string;
+  isCorrect: boolean;
+  orderIndex: number;
+  createdAt: string;
+}
+
+// Test attempt types
+export interface TestAttempt {
+  id: string;
+  testId: string;
+  test?: Test;
+  studentId: string;
+  student?: User;
+  startedAt: string;
+  submittedAt?: string;
+  timeTaken?: number; // in seconds
+  score?: number; // percentage
+  totalQuestions: number;
+  correctAnswers: number;
+  isCompleted: boolean;
+  createdAt: string;
+  updatedAt: string;
+  responses?: TestResponse[];
+}
+
+export interface TestResponse {
+  id: string;
+  attemptId: string;
+  questionId: string;
+  question?: Question;
+  selectedOptionIds: string[];
+  isCorrect: boolean;
+  pointsEarned: number;
+  timeSpent?: number; // in seconds
+  createdAt: string;
+}
+
+// Document and Mind Map types
+export type DocumentStatus = 'UPLOADED' | 'PROCESSING' | 'COMPLETED' | 'FAILED';
+
+export interface Document {
+  id: string;
+  title: string;
+  fileName: string;
+  filePath: string;
+  fileSize: number;
+  mimeType: string;
+  uploadedBy: string;
+  uploadedByUser?: User;
+  processed: boolean;
+  rawText?: string;
+  processedChunks?: ProcessedChunk[];
+  createdAt: string;
+  updatedAt: string;
+  status?: DocumentStatus;
+}
+
+export interface ProcessedChunk {
+  id: number;
+  text: string;
+  startSentence: number;
+  endSentence: number;
+  sentenceCount: number;
+}
+
+export interface DocumentSection {
+  heading: string;
+  content: string;
+  level?: number;
+  startPos?: number;
+  endPos?: number;
+}
+
+export interface EntityExtraction {
+  text: string;
+  label: string;
+  startPos?: number;
+  endPos?: number;
+}
+
+export interface MindMap {
+  id: string;
+  documentId: string;
+  document?: Document;
+  title: string;
+  structure: MindMapStructure;
+  createdBy: string;
+  createdByUser?: User;
+  isPublic: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface MindMapNode {
+  id: string;
+  label: string;
+  type: 'root' | 'branch' | 'leaf';
+  level: number;
+  children?: MindMapNode[];
+  metadata?: {
+    source?: string;
+    entities?: string[];
+    keyPhrases?: string[];
+  };
+}
+
+export interface MindMapStructure {
+  nodes: MindMapNode[];
+  edges?: MindMapEdge[];
+  metadata?: {
+    totalNodes: number;
+    maxDepth: number;
+    createdAt: string;
+    algorithm: string;
+  };
+}
+
+export interface MindMapEdge {
+  id: string;
+  source: string;
+  target: string;
+  type?: 'hierarchical' | 'semantic' | 'cross-reference';
+  weight?: number;
+}
+
+// API Response types
+export interface ApiResponse<T = any> {
+  data?: T;
+  message: string;
+  status: 'success' | 'error' | 'warning';
+  errors?: string[];
+}
+
+export interface PaginatedResponse<T> {
+  data: T[];
+  total: number;
+  page: number;
+  perPage: number;
+  hasNext: boolean;
+  hasPrev: boolean;
+  totalPages: number;
+}
+
+// Form types
+export interface LoginForm {
+  email: string;
+  password: string;
+  remember?: boolean;
+}
+
+export interface SignupForm {
+  email: string;
+  password: string;
+  confirmPassword: string;
+  firstName: string;
+  lastName: string;
+  role: UserRole;
+}
+
+export interface CreateTestForm {
+  title: string;
+  description?: string;
+  timeLimit?: number;
+  maxAttempts: number;
+  passingScore?: number;
+  instructions?: string;
+  isRandomized: boolean;
+  showResults: boolean;
+  allowReview: boolean;
+  startDate?: string;
+  endDate?: string;
+}
+
+export interface CreateQuestionForm {
+  questionText: string;
+  questionType: QuestionType;
+  points: number;
+  explanation?: string;
+  options: CreateOptionForm[];
+}
+
+export interface CreateOptionForm {
+  optionText: string;
+  isCorrect: boolean;
+}
+
+// UI State types
+export interface LoadingState {
+  [key: string]: boolean;
+}
+
+export interface ErrorState {
+  [key: string]: string | null;
+}
+
+export interface ToastMessage {
+  id: string;
+  type: 'success' | 'error' | 'warning' | 'info';
+  title: string;
+  message?: string;
+  duration?: number;
+  action?: {
+    label: string;
+    onClick: () => void;
+  };
+}
+
+// Component Props types
+export interface BaseComponentProps {
+  className?: string;
+  children?: React.ReactNode;
+}
+
+export interface TableColumn<T = any> {
+  key: string;
+  label: string;
+  sortable?: boolean;
+  width?: string;
+  align?: 'left' | 'center' | 'right';
+  render?: (value: any, row: T) => React.ReactNode;
+}
+
+export interface FilterOption {
+  label: string;
+  value: string;
+  count?: number;
+}
+
+export interface SortOption {
+  field: string;
+  direction: 'asc' | 'desc';
+}
+
+// Dashboard types
+export interface DashboardStats {
+  totalUsers?: number;
+  totalTests?: number;
+  totalAttempts?: number;
+  averageScore?: number;
+  recentActivity?: ActivityItem[];
+}
+
+export interface ActivityItem {
+  id: string;
+  type: 'test_created' | 'test_completed' | 'user_registered' | 'document_uploaded';
+  title: string;
+  description: string;
+  timestamp: string;
+  user?: User;
+  metadata?: Record<string, any>;
+}
+
+// Settings types
+export interface UserSettings {
+  theme: 'light' | 'dark' | 'system';
+  language: string;
+  timezone: string;
+  emailNotifications: boolean;
+  pushNotifications: boolean;
+}
+
+// Navigation types
+export interface NavItem {
+  label: string;
+  href: string;
+  icon?: React.ComponentType<{ className?: string }>;
+  badge?: string | number;
+  children?: NavItem[];
+  roles?: UserRole[];
+}
+
+// File upload types
+export interface FileUploadState {
+  file: File | null;
+  progress: number;
+  status: 'idle' | 'uploading' | 'success' | 'error';
+  error?: string;
+}
+
+export interface UploadedFile {
+  id: string;
+  name: string;
+  size: number;
+  type: string;
+  url: string;
+  uploadedAt: string;
+}
+
+
+=== ./tsconfig.json ===
+
+{
+  "compilerOptions": {
+    "lib": ["dom", "dom.iterable", "es6"],
+    "allowJs": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "noEmit": true,
+    "esModuleInterop": true,
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "jsx": "preserve",
+    "incremental": true,
+    "plugins": [
+      {
+        "name": "next"
+      }
+    ],
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./src/*"],
+      "@/components/*": ["./src/components/*"],
+      "@/lib/*": ["./src/lib/*"],
+      "@/types/*": ["./src/types/*"],
+      "@/hooks/*": ["./src/hooks/*"],
+      "@/utils/*": ["./src/lib/utils/*"]
+    },
+    "target": "es2017",
+    "forceConsistentCasingInFileNames": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUncheckedIndexedAccess": true
+  },
+  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
+  "exclude": ["node_modules"]
+}
+
+
+=== EXTRACTION SUMMARY ===
+
+Extraction completed at: 2025-09-26 12:12:57
+Total files processed: 0
+Output file: all_code.txt
+Output size: 88K

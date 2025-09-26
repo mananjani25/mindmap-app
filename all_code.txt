@@ -1,0 +1,149 @@
+PROJECT CODE EXTRACTION
+=======================
+Generated: 2025-09-26 12:06:37
+Directory: /home/vil/code/mindmap-app
+=======================
+
+=== PROJECT STRUCTURE ===
+
+.
+├── README.md
+├── all_code.txt
+├── backend
+│   ├── Dockerfile
+│   ├── app
+│   │   ├── __init__.py
+│   │   ├── api
+│   │   │   ├── __init__.py
+│   │   │   ├── api_v1
+│   │   │   │   ├── api.py
+│   │   │   │   └── endpoints
+│   │   │   │       ├── auth.py
+│   │   │   │       ├── documents.py
+│   │   │   │       └── mindmaps.py
+│   │   │   └── documents
+│   │   ├── core
+│   │   │   ├── config.py
+│   │   │   └── database.py
+│   │   ├── main.py
+│   │   ├── models
+│   │   │   └── database.py
+│   │   ├── repositories
+│   │   │   ├── base.py
+│   │   │   └── document_repository.py
+│   │   ├── schemas
+│   │   │   ├── auth.py
+│   │   │   ├── document.py
+│   │   │   └── mindmap.py
+│   │   ├── services
+│   │   │   └── document_processor.py
+│   │   └── utils
+│   ├── backend_all_code.txt
+│   ├── requirements.txt
+│   ├── run.sh
+│   ├── scripts
+│   └── tests
+│       ├── integration
+│       └── unit
+├── docker-compose.yml
+├── extract_code.sh
+├── frontend
+│   ├── Dockerfile
+│   ├── README.md
+│   ├── all_code.txt
+│   ├── eslint.config.mjs
+│   ├── extract_code.sh
+│   ├── next-env.d.ts
+│   ├── next.config.ts
+│   ├── package-lock.json
+│   ├── package.json
+│   ├── postcss.config.mjs
+│   ├── public
+│   │   ├── file.svg
+│   │   ├── globe.svg
+│   │   ├── next.svg
+│   │   ├── vercel.svg
+│   │   └── window.svg
+│   ├── src
+│   │   ├── app
+│   │   │   ├── api
+│   │   │   │   └── auth
+│   │   │   │       ├── [...nextauth]
+│   │   │   │       │   └── route.ts
+│   │   │   │       └── register
+│   │   │   │           └── route.ts
+│   │   │   ├── auth
+│   │   │   │   ├── signin
+│   │   │   │   │   └── page.tsx
+│   │   │   │   └── signup
+│   │   │   │       └── page.tsx
+│   │   │   ├── dashboard
+│   │   │   │   └── page.tsx
+│   │   │   ├── favicon.ico
+│   │   │   ├── globals.css
+│   │   │   ├── layout.tsx
+│   │   │   ├── middleware.ts
+│   │   │   └── page.tsx
+│   │   ├── components
+│   │   │   ├── auth
+│   │   │   │   ├── SignInForm.tsx
+│   │   │   │   └── SignUpForm.tsx
+│   │   │   ├── dashboard
+│   │   │   │   └── DashboardContent.tsx
+│   │   │   ├── layout
+│   │   │   │   ├── Footer.tsx
+│   │   │   │   ├── Header.tsx
+│   │   │   │   ├── MainLayout.tsx
+│   │   │   │   ├── Providers.tsx
+│   │   │   │   └── Sidebar.tsx
+│   │   │   ├── pages
+│   │   │   │   └── WelcomePage.tsx
+│   │   │   └── ui
+│   │   ├── hooks
+│   │   ├── lib
+│   │   │   ├── apollo
+│   │   │   │   ├── client.ts
+│   │   │   │   └── operations.ts
+│   │   │   ├── auth
+│   │   │   │   ├── config.ts
+│   │   │   │   └── queries.ts
+│   │   │   ├── utils
+│   │   │   └── utils.ts
+│   │   └── types
+│   │       └── index.ts
+│   └── tsconfig.json
+└── hasura
+    ├── all_files.txt
+    ├── config.yaml
+    ├── hasura-metadata
+    ├── metadata
+    │   ├── actions.graphql
+    │   ├── actions.yaml
+    │   ├── allow_list.yaml
+    │   ├── api_limits.yaml
+    │   ├── backend_configs.yaml
+    │   ├── cron_triggers.yaml
+    │   ├── databases
+    │   │   ├── databases.yaml
+    │   │   └── default
+    │   │       └── tables
+    │   │           └── tables.yaml
+    │   ├── graphql_schema_introspection.yaml
+    │   ├── inherited_roles.yaml
+    │   ├── metrics_config.yaml
+    │   ├── network.yaml
+    │   ├── opentelemetry.yaml
+    │   ├── query_collections.yaml
+    │   ├── remote_schemas.yaml
+    │   ├── rest_endpoints.yaml
+    │   └── version.yaml
+    ├── migrations
+    │   └── default
+    │       └── 1758710449155_initial_schema_dump
+    │           └── up.sql
+    └── seeds
+
+51 directories, 85 files
+
+=== SOURCE CODE FILES ===
+

@@ -1,26 +1,92 @@
+/* src/app/globals.css */
+
+/* 1. Import Google Fonts (from ra-admin) */
+@import url('https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600;800&display=swap');
+
+/* 2. Import the Tailwind CSS engine */
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+/* 3. Define the custom theme based on ra-admin variables */
+@theme {
+  /* Core Color Palette - Adjusted for accuracy */
+  --color-primary: rgb(80 201 218 / <alpha-value>);     /* #50C9DA */
+  --color-secondary: rgb(160 160 176 / <alpha-value>);   /* #a0a0b0 */
+  --color-success: rgb(124 212 129 / <alpha-value>);   /* #7cd481 */
+  --color-danger: rgb(220 53 69 / <alpha-value>);      /* #dc3545 */
+  --color-warning: rgb(235 195 63 / <alpha-value>);    /* #ebc33f */
+  --color-info: rgb(83 90 231 / <alpha-value>);        /* #535ae7 */
+  --color-light: rgb(229 227 224 / <alpha-value>);     /* #e5e3e0 */
+  --color-dark: rgb(72 68 61 / <alpha-value>);         /* #48443d */
+
+  /* Body & Surface Colors */
+  --color-body-bg: #f6f6f6;
+  --color-surface: #ffffff;
+  --color-border: #ebedf0;
+
+  /* Font Properties */
+  --font-family-sans: "Golos Text", var(--font-geist-sans), sans-serif;
+  --font-color-base: #15264b;
+  --font-color-title: #1c3264;
+  --font-color-secondary: #22242c;
+  --font-color-light: #a0a0b0;
+
+  /* Sizing and Radius */
+  --font-size-base: 14px;
+  --border-radius-app: 0.8rem;
+  --border-radius-default: 0.5rem;
+  --shadow-default: 0px 0px 21px 3px rgb(139 132 118 / 0.05);
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+/* 4. Define base layer styles */
+@layer base {
+  body {
+    background-color: var(--color-body-bg);
+    color: var(--font-color-base);
+    font-family: var(--font-family-sans);
+    font-size: var(--font-size-base);
+  }
+  h1, h2, h3, h4, h5, h6 {
+    color: var(--font-color-title);
+    line-height: 1.4;
+  }
+  .card {
+    @apply bg-surface rounded-[var(--border-radius-app)] border-none shadow-default mb-6;
+  }
+  .card-header {
+    @apply bg-transparent border-b border-border p-5;
+  }
+  .card-body {
+    @apply p-5;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+/* --- RA Admin Specific Component Styles --- */
+.app-scroll {
+  /* Custom scrollbar styles can be added here if needed */
+}
+.avatar-group img {
+    @apply ring-2 ring-white;
+}
+
+/* Timeline styles from Order History */
+.app-timeline-box {
+    @apply relative;
+    list-style: none;
+    padding-left: 1.5rem;
+}
+.app-timeline-box .timeline-section {
+    @apply relative pl-8 pb-6;
+}
+.app-timeline-box .timeline-section:last-child {
+    @apply pb-0;
+}
+.app-timeline-box .timeline-section::before {
+    content: '';
+    @apply absolute top-0 left-[17px] w-0.5 h-full bg-border;
+}
+.app-timeline-box .timeline-section:last-child::before {
+    @apply h-0;
+}
+.app-timeline-box .timeline-icon {
+    @apply absolute -left-2;
 }

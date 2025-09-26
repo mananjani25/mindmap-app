@@ -1,27 +1,18 @@
-/**
- * Sidebar navigation component with role-based menu items
- */
+// src/components/layout/Sidebar.tsx
 
 'use client';
 
 import React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { signOut, useSession } from 'next-auth/react';
 import {
-  HomeIcon,
-  DocumentTextIcon,
-  AcademicCapIcon,
-  UsersIcon,
-  ChartBarIcon,
-  CogIcon,
-  XMarkIcon,
-  BeakerIcon,
-  CloudArrowUpIcon,
-  MapIcon,
-} from '@heroicons/react/24/outline';
-import { cn } from '@/lib/utils';
+  FileText, Cloud, BarChart3, Users, GraduationCap, Settings, LogOut, X, Map, Home
+} from 'lucide-react';
 import type { UserRole } from '@/types';
+import { cn, getInitials } from '@/lib/utils';
 
+// --- YOUR NAVIGATION STRUCTURE IS PRESERVED ---
 interface SidebarProps {
   isOpen: boolean;
   onClose: () => void;
@@ -33,217 +24,95 @@ interface NavItem {
   href: string;
   icon: React.ComponentType<{ className?: string }>;
   roles: UserRole[];
-  badge?: string;
 }
 
 const navigation: NavItem[] = [
-  {
-    name: 'Dashboard',
-    href: '/dashboard',
-    icon: HomeIcon,
-    roles: ['ADMIN', 'INSTRUCTOR', 'STUDENT'],
-  },
-  {
-    name: 'Tests',
-    href: '/tests',
-    icon: DocumentTextIcon,
-    roles: ['ADMIN', 'INSTRUCTOR', 'STUDENT'],
-  },
-  {
-    name: 'Documents',
-    href: '/documents',
-    icon: CloudArrowUpIcon,
-    roles: ['ADMIN', 'INSTRUCTOR'],
-  },
-  {
-    name: 'Mind Maps',
-    href: '/mindmaps',
-    icon: MapIcon,
-    roles: ['ADMIN', 'INSTRUCTOR'],
-  },
-  {
-    name: 'Results',
-    href: '/results',
-    icon: ChartBarIcon,
-    roles: ['ADMIN', 'INSTRUCTOR'],
-  },
-  {
-    name: 'Students',
-    href: '/students',
-    icon: AcademicCapIcon,
-    roles: ['ADMIN', 'INSTRUCTOR'],
-  },
-  {
-    name: 'Users',
-    href: '/users',
-    icon: UsersIcon,
-    roles: ['ADMIN'],
-  },
-  {
-    name: 'Settings',
-    href: '/settings',
-    icon: CogIcon,
-    roles: ['ADMIN', 'INSTRUCTOR', 'STUDENT'],
-  },
+  { name: 'Dashboard', href: '/dashboard', icon: Home, roles: ['ADMIN', 'INSTRUCTOR', 'STUDENT'] },
+  { name: 'Tests', href: '/tests', icon: FileText, roles: ['ADMIN', 'INSTRUCTOR', 'STUDENT'] },
+  { name: 'Documents', href: '/documents', icon: Cloud, roles: ['ADMIN', 'INSTRUCTOR'] },
+  { name: 'Mind Maps', href: '/mindmaps', icon: Map, roles: ['ADMIN', 'INSTRUCTOR'] },
+  { name: 'Results', href: '/results', icon: BarChart3, roles: ['ADMIN', 'INSTRUCTOR'] },
+  { name: 'Students', href: '/students', icon: GraduationCap, roles: ['ADMIN', 'INSTRUCTOR'] },
+  { name: 'Users', href: '/users', icon: Users, roles: ['ADMIN'] },
+  { name: 'Settings', href: '/settings', icon: Settings, roles: ['ADMIN', 'INSTRUCTOR', 'STUDENT'] },
 ];
+// --- END OF YOUR STRUCTURE ---
+
+const NavLinks = ({ userRole, onClose }: { userRole?: UserRole, onClose: () => void }) => {
+  const pathname = usePathname();
+  const filteredNavigation = navigation.filter((item) => userRole ? item.roles.includes(userRole) : true);
+
+  return (
+    <ul className="flex-1 flex flex-col gap-y-1 px-4 ">
+      {filteredNavigation.map((item) => {
+        const isActive = pathname === item.href || (item.href !== '/' && pathname.startsWith(item.href));
+        return (
+          <li key={item.name}>
+            <Link
+              href={item.href}
+              onClick={onClose}
+              className={cn(
+                isActive ? 'bg-[#50C9DA] text-white' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900',
+                'group flex items-center gap-x-3 rounded-xl p-2 text-sm font-medium leading-6'
+              )}
+            >
+              <item.icon className="h-5 w-5 shrink-0" aria-hidden="true" />
+              <span>{item.name}</span>
+            </Link>
+          </li>
+        );
+      })}
+    </ul>
+  );
+};
 
 export function Sidebar({ isOpen, onClose, userRole }: SidebarProps) {
-  const pathname = usePathname();
-
-  const filteredNavigation = navigation.filter((item) =>
-    userRole ? item.roles.includes(userRole) : true
-  );
+    const { data: session } = useSession();
+    const user = session?.user;
 
   return (
     <>
-      {/* Desktop sidebar */}
-      <div className="hidden lg:fixed lg:inset-y-0 lg:z-50 lg:flex lg:w-64 lg:flex-col">
-        <div className="flex grow flex-col gap-y-5 overflow-y-auto bg-white px-6 pb-4 shadow-sm border-r border-gray-200">
-          {/* Logo */}
-          <div className="flex h-16 shrink-0 items-center">
-            <div className="flex items-center">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-600">
-                <BeakerIcon className="h-5 w-5 text-white" />
-              </div>
-              <span className="ml-2 text-lg font-semibold text-gray-900">
-                MindMap
-              </span>
-            </div>
+      {/* --- Desktop Sidebar --- */}
+      <nav className="hidden lg:fixed lg:inset-y-0 lg:z-50 lg:flex lg:w-60 lg:flex-col rounded-xl m-1 overflow-hidden">
+        <div className="flex grow flex-col gap-y-5 overflow-y-auto bg-surface border-r border-border pb-4">
+          <div className="flex h-16 shrink-0 items-center px-6">
+            <h1 className="text-2xl font-bold text-[#50C9DA]">MindMap</h1>
           </div>
-
-          {/* Navigation */}
           <nav className="flex flex-1 flex-col">
-            <ul role="list" className="flex flex-1 flex-col gap-y-7">
-              <li>
-                <ul role="list" className="-mx-2 space-y-1">
-                  {filteredNavigation.map((item) => {
-                    const isActive = pathname === item.href || 
-                      (item.href !== '/dashboard' && pathname.startsWith(item.href));
-                    
-                    return (
-                      <li key={item.name}>
-                        <Link
-                          href={item.href}
-                          className={cn(
-                            isActive
-                              ? 'bg-blue-50 text-blue-700 border-r-2 border-blue-700'
-                              : 'text-gray-700 hover:text-blue-700 hover:bg-gray-50',
-                            'group flex gap-x-3 rounded-l-md p-2 text-sm leading-6 font-medium'
-                          )}
-                        >
-                          <item.icon
-                            className={cn(
-                              isActive ? 'text-blue-700' : 'text-gray-400 group-hover:text-blue-700',
-                              'h-6 w-6 shrink-0'
-                            )}
-                            aria-hidden="true"
-                          />
-                          <span className="flex-1">{item.name}</span>
-                          {item.badge && (
-                            <span className="ml-auto text-xs bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full">
-                              {item.badge}
-                            </span>
-                          )}
-                        </Link>
-                      </li>
-                    );
-                  })}
-                </ul>
-              </li>
+            <NavLinks userRole={userRole} onClose={() => {}} />
 
-              {/* Bottom section */}
-              <li className="mt-auto">
-                <div className="rounded-lg bg-gray-50 p-4">
-                  <div className="flex items-center">
-                    <div className="flex-shrink-0">
-                      <BeakerIcon className="h-6 w-6 text-gray-400" />
-                    </div>
-                    <div className="ml-3 flex-1">
-                      <p className="text-sm font-medium text-gray-900">
-                        Need help?
-                      </p>
-                      <p className="text-xs text-gray-500">
-                        Check our documentation
-                      </p>
-                    </div>
+            {/* Profile section at the bottom */}
+            <div className="mt-auto px-4">
+              <div className="flex items-center gap-x-3 p-2">
+                 <div className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-800 text-sm font-medium text-white">
+                    {user ? getInitials(`${user.firstName} ${user.lastName}`) : 'N'}
                   </div>
-                </div>
-              </li>
-            </ul>
+              </div>
+            </div>
           </nav>
         </div>
-      </div>
+      </nav>
 
-      {/* Mobile sidebar */}
-      <div
-        className={cn(
-          'fixed inset-y-0 left-0 z-50 w-64 transform bg-white shadow-xl transition-transform duration-300 ease-in-out lg:hidden',
-          isOpen ? 'translate-x-0' : '-translate-x-full'
-        )}
-      >
-        <div className="flex grow flex-col gap-y-5 overflow-y-auto px-6 pb-4">
-          {/* Mobile header */}
-          <div className="flex h-16 shrink-0 items-center justify-between">
-            <div className="flex items-center">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-600">
-                <BeakerIcon className="h-5 w-5 text-white" />
-              </div>
-              <span className="ml-2 text-lg font-semibold text-gray-900">
-                MindMap
-              </span>
+      {/* --- Mobile Sidebar (Drawer) --- */}
+      <div className={cn('fixed inset-y-0 left-0 z-50 w-60 transform bg-surface shadow-xl transition-transform duration-300 ease-in-out lg:hidden rounded-xl overflow-hidden', isOpen ? 'translate-x-0' : '-translate-x-full')}>
+        <div className="flex grow flex-col gap-y-5 overflow-y-auto pb-4">
+            <div className="flex h-16 shrink-0 items-center justify-between px-6">
+                <h1 className="text-2xl font-bold text-slate-800">MindMap</h1>
+                <button type="button" className="-m-2.5 p-2.5" onClick={onClose}>
+                    <span className="sr-only">Close sidebar</span>
+                    <X className="h-6 w-6 text-slate-800" />
+                </button>
             </div>
-            <button
-              type="button"
-              className="ml-1 flex h-10 w-10 items-center justify-center rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-inset"
-              onClick={onClose}
-            >
-              <span className="sr-only">Close sidebar</span>
-              <XMarkIcon className="h-6 w-6 text-gray-400" aria-hidden="true" />
-            </button>
-          </div>
-
-          {/* Mobile navigation */}
-          <nav className="flex flex-1 flex-col">
-            <ul role="list" className="flex flex-1 flex-col gap-y-7">
-              <li>
-                <ul role="list" className="-mx-2 space-y-1">
-                  {filteredNavigation.map((item) => {
-                    const isActive = pathname === item.href || 
-                      (item.href !== '/dashboard' && pathname.startsWith(item.href));
-                    
-                    return (
-                      <li key={item.name}>
-                        <Link
-                          href={item.href}
-                          onClick={onClose}
-                          className={cn(
-                            isActive
-                              ? 'bg-blue-50 text-blue-700'
-                              : 'text-gray-700 hover:text-blue-700 hover:bg-gray-50',
-                            'group flex gap-x-3 rounded-md p-2 text-sm leading-6 font-medium'
-                          )}
-                        >
-                          <item.icon
-                            className={cn(
-                              isActive ? 'text-blue-700' : 'text-gray-400 group-hover:text-blue-700',
-                              'h-6 w-6 shrink-0'
-                            )}
-                            aria-hidden="true"
-                          />
-                          {item.name}
-                          {item.badge && (
-                            <span className="ml-auto text-xs bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full">
-                              {item.badge}
-                            </span>
-                          )}
-                        </Link>
-                      </li>
-                    );
-                  })}
-                </ul>
-              </li>
-            </ul>
-          </nav>
+            <nav className="flex flex-1 flex-col">
+                <NavLinks userRole={userRole} onClose={onClose} />
+                <div className="mt-auto px-4">
+                  <div className="flex items-center gap-x-3 p-2">
+                     <div className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-800 text-sm font-medium text-white">
+                        {user ? getInitials(`${user.firstName} ${user.lastName}`) : 'N'}
+                      </div>
+                  </div>
+                </div>
+            </nav>
         </div>
       </div>
     </>

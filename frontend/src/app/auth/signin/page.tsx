@@ -1,24 +1,19 @@
-import { getServerSession } from "next-auth";
-import { redirect } from "next/navigation";
-import { authOptions } from "@/lib/auth/config";
+// src/app/auth/signin/page.tsx
+
 import { SignInForm } from "@/components/auth/SignInForm";
 
-export default async function SignInPage() {
-  const session = await getServerSession(authOptions);
-
-  if (session) {
-    redirect('/dashboard');
-  }
-
+export default function SignInPage() {
+  // No session check needed
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-md w-full space-y-8">
-        <div>
-          <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
-            Sign in to your account
-          </h2>
+    <div className="login-form-container">
+      <div className="form_container">
+        <div className="app-form">
+          <div className="text-center mb-4">
+            <h3 className="mb-1">Sign In</h3>
+            <p>Enter your email & password to login</p>
+          </div>
+          <SignInForm />
         </div>
-        <SignInForm />
       </div>
     </div>
   );
