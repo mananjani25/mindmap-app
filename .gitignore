@@ -24,3 +24,5 @@ docker-compose.override.yml
 .idea/
 .vscode/
 *.DS_Storebackend/venv/
+backend/venv/
+backend/venv/
