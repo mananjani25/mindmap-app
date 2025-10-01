@@ -16,7 +16,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "MindMap - AI-Powered Test & Document Management",
+  title: "MindMap - AI-Powered Test & Document Management,updated by amit",
   description: "Professional platform for test creation, document processing, and mind map generation",
   viewport: "width=device-width, initial-scale=1",
   robots: "index, follow",
