@@ -1,0 +1,22 @@
+/* cursor-fix.css */
+button, 
+a, 
+[role="button"], 
+summary,
+.cursor-pointer {
+  cursor: pointer !important;
+}
+
+button:not(:disabled),
+[type="button"]:not(:disabled),
+[type="reset"]:not(:disabled),
+[type="submit"]:not(:disabled) {
+  cursor: pointer !important;
+}
+
+button:hover:not(:disabled),
+a:hover,
+[role="button"]:hover,
+.cursor-pointer:hover {
+  cursor: pointer !important;
+}

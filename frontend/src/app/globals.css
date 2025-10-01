@@ -90,3 +90,70 @@
 .app-timeline-box .timeline-icon {
     @apply absolute -left-2;
 }
+
+/* cursor-fix.css */
+button, 
+a, 
+[role="button"], 
+summary,
+.cursor-pointer {
+  cursor: pointer !important;
+}
+
+button:not(:disabled),
+[type="button"]:not(:disabled),
+[type="reset"]:not(:disabled),
+[type="submit"]:not(:disabled) {
+  cursor: pointer !important;
+}
+
+button:hover:not(:disabled),
+a:hover,
+[role="button"]:hover,
+.cursor-pointer:hover {
+  cursor: pointer !important;
+}
+
+/* ========== ADD THE CURSOR FIXES BELOW - AT THE VERY END ========== */
+
+/* FORCE POINTER CURSOR ON ALL INTERACTIVE ELEMENTS */
+button, 
+a, 
+[role="button"], 
+summary,
+.cursor-pointer,
+[class*="cursor-pointer"],
+*[class*="button"],
+*[class*="btn"] {
+  cursor: pointer !important;
+}
+
+/* Force pointer on all button states */
+button:not(:disabled),
+button:hover:not(:disabled),
+button:active,
+button:focus,
+button:visited,
+[type="button"]:not(:disabled),
+[type="reset"]:not(:disabled), 
+[type="submit"]:not(:disabled),
+[class*="GradientButton"] {
+  cursor: pointer !important;
+}
+
+/* Force pointer on hover for all interactive elements */
+a:hover,
+[role="button"]:hover,
+.cursor-pointer:hover,
+button:hover {
+  cursor: pointer !important;
+}
+
+/* Specific override for any element that might have default cursor */
+* {
+  cursor: default;
+}
+
+button, a, [role="button"], summary, .cursor-pointer {
+  cursor: pointer !important;
+}
